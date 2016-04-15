@@ -17,20 +17,14 @@
 (struct funccall-exp (tgt paramlist pos) #:transparent)
 ;;変数宣言文
 (struct declaration (declist pos) #:transparent)
-;;変数宣言 変数部 - not pointer
-;(struct declarator-notpointer (id pos) #:transparent)
-;;変数宣言 変数部 - pointer
-;(struct declarator-pointer (id pos) #:transparent)
-;;
-;;(struct direct-declarator-var (id pos) #:transparent)
-;;
-;;(struct direct-declarator-array(id num pos) #:transparent)
-;;
+;関数定義
 (struct func-prototype (type id declarator pos) #:transparent)
+;関数宣言
 (struct func-definition (type declarator statement pos) #:transparent)
-;;
+;変数宣言
 (struct param-declaration (type declarator pos) #:transparent)
-
+;{}で挟まれた複文
+(struct compound-stmt (declaration-list-opt statement-list-opt pos) #:transparent)
 ;; 算術演算: <left-exp> <op> <right-exp>
 (struct aop-exp    (op left right pos) #:transparent)
 ;; 比較演算: <left-exp> <op> <right-exp>
@@ -49,7 +43,7 @@
 ;;int,void
 (struct int-id (pos) #:transparent)
 (struct void-id (pos) #:transparent)
-;;
+;;ORとAND
 (struct logical-and-or-expr (op log1 log2 pos) #:transparent)
 ;;
 (struct expression (exp assign-exp pos) #:transparent)

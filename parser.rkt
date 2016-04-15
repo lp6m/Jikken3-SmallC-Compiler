@@ -143,7 +143,7 @@
            SEMI expression-opt RPAR statement) (stx:for-stmt $3 $5 $7 $9 $1-start-pos))
      ((RETURN expression-opt SEMI) (stx:return-stmt $2 $1-start-pos)))
     (compound-statement
-     ((LBRA declaration-list-opt statement-list-opt RBRA) `(,@$2 ,@$3)))
+     ((LBRA declaration-list-opt statement-list-opt RBRA) (stx:compound-stmt $2 $3 $1-start-pos)))
     (declaration-list-opt
      (() '())
      ((declaration-list) $1))
@@ -230,6 +230,16 @@
 
 (define (syntax-sugar tree)
   (cond ((list? tree) (map (lambda (x) (syntax-sugar x)) tree))
+        ;for,単項のマイナス演算,配列参照式はシンタックスシュガーを適用する。
+        ((stx:for-stmt? tree)
+         (stx:compound-stmt
+          '()
+          (list
+           (syntax-sugar (stx:for-stmt-initial tree))
+           (stx:while-stmt (syntax-sugar (stx:for-stmt-test tree))
+                               (stx:compound-stmt '() (list  (syntax-sugar (stx:for-stmt-body tree)) (syntax-sugar (stx:for-stmt-repeat tree))) (stx:for-stmt-pos tree))
+                               (stx:for-stmt-pos tree)))
+          (stx:for-stmt-pos tree)))
         ((stx:lit-exp? tree) (stx:lit-exp (syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
         ((stx:var-exp? tree) (stx:var-exp (syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
         ((stx:neg-exp? tree) (stx:neg-exp (syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
@@ -252,12 +262,16 @@
         ((stx:if-stmt? tree) (stx:if-stmt (syntax-sugar (stx:if-stmt-test tree)) (syntax-sugar (stx:if-stmt-tbody tree)) (syntax-sugar (stx:if-stmt-ebody))
                                           (stx:if-stmt-pos tree)))
         ((stx:while-stmt? tree) (stx:while-stmt (syntax-sugar (stx:while-stmt-test tree)) (syntax-sugar (stx:while-stmt-body tree)) (stx:while-stmt-pos tree)))
-        ((stx:for-stmt? tree) (stx:while-stmt (syntax-sugar (stx:for-stmt-test tree)) (syntax-sugar (list (stx:for-stmt-body tree))) (syntax-sugar (stx:for-stmt-repeat tree)) (stx:for-stmt-pos tree)))
         ((stx:return-stmt? tree) (stx:return-stmt (syntax-sugar (stx:return-stmt-var tree)) (stx:return-stmt-pos tree)))
         ;((stx:int-id? tree)
-        ;((stx:void-id? tree))
-        
+        ;((stx:void-id? tree)
         ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (syntax-sugar (stx:logical-and-or-expr-op tree)) (syntax-sugar (stx:logical-and-or-expr-log1 tree))
                                                                   (syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
         ((stx:expression? tree) (stx:expression (syntax-sugar (stx:expression exp)) (syntax-sugar (stx:expression-assign-exp tree)) (stx:expression-pos tree)))
+        ((stx:compound-stmt? tree) (stx:compound-stmt (syntax-sugar (stx:compound-stmt-declaration-list-opt tree))
+                                                                (syntax-sugar (stx:compound-stmt-statement-list-opt tree))
+                                                                (stx:compound-stmt-pos tree)))
         (else tree)))
+
+
+
