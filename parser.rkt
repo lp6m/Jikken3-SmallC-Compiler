@@ -192,7 +192,7 @@
     (unary-expr ;単項
      ((postfix-expr) $1)
      ((- unary-expr) (stx:neg-exp $2 $1-start-pos))
-     ((& ID) (stx:addr-exp $2 $1-start-pos))
+     ((& unary-expr) (stx:addr-exp $2 $1-start-pos))
      ((* unary-expr) (stx:deref-exp $2 $1-start-pos)))
     (postfix-expr ;付加
      ((primary-expr) $1)
@@ -240,14 +240,20 @@
                                (stx:compound-stmt '() (list  (syntax-sugar (stx:for-stmt-body tree)) (syntax-sugar (stx:for-stmt-repeat tree))) (stx:for-stmt-pos tree))
                                (stx:for-stmt-pos tree)))
           (stx:for-stmt-pos tree)))
-        ((stx:lit-exp? tree) (stx:lit-exp (syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
-        ((stx:var-exp? tree) (stx:var-exp (syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
         ((stx:neg-exp? tree) (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
         ((stx:deref-exp? tree)(stx:deref-exp (syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
-        ((stx:addr-exp? tree) (stx:addr-exp (syntax-sugar (stx:addr-exp-var tree)) (stx:addr-exp-pos tree)))
+        ((stx:addr-exp? tree) 
+         (let ((x (syntax-sugar (stx:addr-exp-var tree))))
+             (if (stx:deref-exp? x)
+                 (syntax-sugar (stx:deref-exp-arg x))
+                 (stx:addr-exp x (stx:addr-exp-pos tree)))))
+         ;(stx:addr-exp (syntax-sugar (stx:addr-exp-var tree)) (stx:addr-exp-pos tree)))
         ((stx:array-exp? tree) 
          (stx:deref-exp 
           (stx:aop-exp '+ (syntax-sugar (stx:array-exp-tgt tree)) (syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))
+        
+        ((stx:lit-exp? tree) (stx:lit-exp (syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
+        ((stx:var-exp? tree) (stx:var-exp (syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
         ((stx:funccall-exp? tree) (stx:funccall-exp (syntax-sugar (stx:funccall-exp-tgt tree)) (syntax-sugar (stx:funccall-exp-paramlist tree)) (stx:funccall-exp-pos tree)))
         ((stx:declaration? tree) (stx:declaration (syntax-sugar (stx:declaration-declist tree)) (stx:declaration-pos tree)))
         ((stx:func-prototype? tree) (stx:func-prototype (syntax-sugar (stx:func-prototype-type tree)) (syntax-sugar (stx:func-prototype-id tree))
