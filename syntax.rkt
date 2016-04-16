@@ -20,7 +20,7 @@
 ;関数定義
 (struct func-prototype (type id declarator pos) #:transparent)
 ;関数宣言
-(struct func-definition (type declarator statement pos) #:transparent)
+(struct func-definition (type id declarator statement pos) #:transparent)
 ;変数宣言
 (struct param-declaration (type declarator pos) #:transparent)
 ;{}で挟まれた複文

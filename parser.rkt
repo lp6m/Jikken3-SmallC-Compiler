@@ -117,7 +117,7 @@
      ((ID LPAR parameter-type-list-opt RPAR) `(,'() ,$1 ,$3));(stx:func-declarator-notpointer $1 $3 $1-start-pos))
      ((* ID LPAR parameter-type-list-opt RPAR) `(,'* ,$2 ,$4)));(stx:func-declarator-pointer $2 $4 $1-start-pos)))
     (function-definition
-     ((type-specifier function-declarator compound-statement) (stx:func-definition $1 $2 $3 $1-start-pos)))
+     ((type-specifier function-declarator compound-statement) (stx:func-definition (list $1 (car $2)) (cadr $2) (caddr $2) $3 $1-start-pos)))
     (parameter-type-list-opt
      (() '())
      ((parameter-type-list) $1))
@@ -291,25 +291,24 @@
       ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
       ((stx:declaration? ast) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
       ((stx:func-prototype? ast) (func-ptype-to-smallc ast))
-      ((stx:func-definition? ast) '())
+      ((stx:func-definition? ast) (func-definition-to-smallc ast))
       ))
   
+  (define (func-definition-to-smallc func-def) "")
   (define (func-ptype-to-smallc ptype) (string-append (func-functype-tostr (stx:func-prototype-type ptype))
                                                       (func-id-tostr (stx:func-prototype-id ptype))
                                                       "(" (func-arglist-tostr (stx:func-prototype-declarator ptype)) ");"))
-  (define (func-functype-tostr type) 
+  (define (func-functype-tostr type)
     (let ((type-ato-str (if (null? (cadr type)) " " (string-append " " (symbol->string (cadr type))))))
       (string-append (symbol->string (car type)) type-ato-str)))
-  
   (define (func-id-tostr id) (symbol->string id))
-  
-  (define (func-arglist-tostr arglist)
-    (if (null? arglist) 
-        ""
+  (define (func-arglist-tostr arglist);引数宣言のリストをカンマ区切りの引数文字列に変換
+    (if (null? arglist)
+        "" ;引数0個
         (if (= (length arglist) 1) 
             (func-argument-tostr (car arglist))
             (string-append (func-argument-tostr (car arglist)) ", " (func-arglist-tostr (cdr arglist))))))
-  (define (func-argument-tostr arg)
+  (define (func-argument-tostr arg) ;1つの引数宣言(* a int)を"int *a"に変換
     (let ((type-ato-str (if (null? (car arg)) " " (string-append " " (symbol->string (car arg)))))
           (type (symbol->string (caddr arg)))
           (id (symbol->string (cadr arg))))
@@ -320,7 +319,7 @@
       (cond ((null? declist) (string-append rst ";"))
             ((equal? "" rst) (declist-tostr declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
             (else (declist-tostr (cdr declist) (string-append rst (cdar declist) commastr))))))
-  (define (dec-to-smallc dec) ;一つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
+  (define (dec-to-smallc dec) ;1つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
     (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
          (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
          (ispointer (if (symbol? (caddr dec)) (symbol->string (caddr dec)) "" ))
