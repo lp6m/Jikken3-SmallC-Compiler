@@ -99,14 +99,14 @@
                    (isarraylist (cddr x))
                    (pointer_ka (car x)))
                 (if (null? isarraylist)
-                    (cons param `('() ,pointer_ka ,$1)) ;not array
+                    (cons param `(,'() ,pointer_ka ,$1)) ;not array
                     (cons param `(,(car isarraylist) ,pointer_ka ,$1 ,(cadr isarraylist)))))) $2) $1-start-pos)));array
      ;((type-specifier declarator-list SEMI) (stx:declaration (map (lambda (x) (list  x $1)) $2) $1-start-pos)))
     (declarator-list
      ((declarator) (list $1))
      ((declarator-list COMMA declarator) `(,@$1 ,$3)))
     (declarator
-     ((direct-declarator) `('() ,@$1));(stx:declarator-notpointer $1 $1-start-pos ))
+     ((direct-declarator) `(,'() ,@$1));(stx:declarator-notpointer $1 $1-start-pos ))
      ((* direct-declarator) `(,'* ,@$2)));(stx:declarator-pointer $2 $1-start-pos )))
     (direct-declarator
      ((ID) (list $1));(stx:direct-declarator-var $1 $1-start-pos))
@@ -114,7 +114,7 @@
     (function-prototype
      ((type-specifier function-declarator SEMI) (stx:func-prototype (list $1 (car $2)) (cadr $2) (caddr $2) $1-start-pos)))
     (function-declarator ;func(a,b) *func(x,y)
-     ((ID LPAR parameter-type-list-opt RPAR) `('() ,$1 ,$3));(stx:func-declarator-notpointer $1 $3 $1-start-pos))
+     ((ID LPAR parameter-type-list-opt RPAR) `(,'() ,$1 ,$3));(stx:func-declarator-notpointer $1 $3 $1-start-pos))
      ((* ID LPAR parameter-type-list-opt RPAR) `(,'* ,$2 ,$4)));(stx:func-declarator-pointer $2 $4 $1-start-pos)))
     (function-definition
      ((type-specifier function-declarator compound-statement) (stx:func-definition $1 $2 $3 $1-start-pos)))
@@ -125,9 +125,9 @@
      ((parameter-declaration) (list $1))
      ((parameter-type-list COMMA parameter-declaration) `(,@$1 ,$3)))
     (parameter-declaration
-     ((type-specifier parameter-declarator) (list $2 $1)));(stx:param-declaration $1 $2 $1-start-pos))) ;;should modify
+     ((type-specifier parameter-declarator) `(,@$2 ,$1)));(stx:param-declaration $1 $2 $1-start-pos))) ;;should modify
     (parameter-declarator
-     ((ID) `(,$1)) 
+     ((ID) `(,'() ,$1)) 
      ((* ID) `(,'* ,$2)))
     (type-specifier
      ((INT) 'int);(stx:int-id $1-start-pos))
@@ -293,7 +293,7 @@
       ((stx:func-prototype? ast) '())
       ((stx:func-definition? ast) '())
       ))
-  (define (dec-to-smallc dec) ;一つの変数宣言を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
+  (define (dec-to-smallc dec) ;一つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
     (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
          (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
          (ispointer (if (symbol? (caddr dec)) (symbol->string (caddr dec)) "" ))
