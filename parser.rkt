@@ -289,17 +289,37 @@
   (define (main-program-reverse ast)
     (cond
       ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
-      ((stx:declaration? ast) (declist-to-string (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
-      ((stx:func-prototype? ast) (func-prototype-to-smallc ast))
+      ((stx:declaration? ast) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
+      ((stx:func-prototype? ast) (func-ptype-to-smallc ast))
       ((stx:func-definition? ast) '())
       ))
-  (define (func-prototype-to-smallc ptype) '())
-   
-  (define (declist-to-string declist rst);consセルのリストから文字列を作成
+  
+  (define (func-ptype-to-smallc ptype) (string-append (func-functype-tostr (stx:func-prototype-type ptype))
+                                                      (func-id-tostr (stx:func-prototype-id ptype))
+                                                      "(" (func-arglist-tostr (stx:func-prototype-declarator ptype)) ");"))
+  (define (func-functype-tostr type) 
+    (let ((type-ato-str (if (null? (cadr type)) " " (string-append " " (symbol->string (cadr type))))))
+      (string-append (symbol->string (car type)) type-ato-str)))
+  
+  (define (func-id-tostr id) (symbol->string id))
+  
+  (define (func-arglist-tostr arglist)
+    (if (null? arglist) 
+        ""
+        (if (= (length arglist) 1) 
+            (func-argument-tostr (car arglist))
+            (string-append (func-argument-tostr (car arglist)) ", " (func-arglist-tostr (cdr arglist))))))
+  (define (func-argument-tostr arg)
+    (let ((type-ato-str (if (null? (car arg)) " " (string-append " " (symbol->string (car arg)))))
+          (type (symbol->string (caddr arg)))
+          (id (symbol->string (cadr arg))))
+      (string-append type type-ato-str id)))
+                                                       
+  (define (declist-tostr declist rst);consセルのリストから文字列を作成
     (let ((commastr (if (not (= (length declist) 1)) ", " "")))
       (cond ((null? declist) (string-append rst ";"))
-            ((equal? "" rst) (declist-to-string declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
-            (else (declist-to-string (cdr declist) (string-append rst (cdar declist) commastr))))))
+            ((equal? "" rst) (declist-tostr declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
+            (else (declist-tostr (cdr declist) (string-append rst (cdar declist) commastr))))))
   (define (dec-to-smallc dec) ;一つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
     (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
          (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
