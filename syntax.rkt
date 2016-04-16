@@ -33,7 +33,8 @@
 ;; 変数への代入: <var> = <exp>;
 (struct assign-stmt  (var src pos)              #:transparent)
 ;; 条件分岐: if(<exp>) <cmpd-stmt> else <cmpd-stmt>
-(struct if-stmt      (test tbody ebody pos)     #:transparent)
+(struct if-else-stmt      (test tbody ebody pos)     #:transparent)
+(struct if-stmt (test tbody pos) #:transparent)
 ;; 繰り返し: while(<exp>) <cmpd-stmt>
 (struct while-stmt   (test body pos)            #:transparent)
 ;; for(initial; test; repeat) body

@@ -136,8 +136,8 @@
      ((SEMI) '())
      ((expression SEMI) $1)
      ((compound-statement) $1)
-     ((IF LPAR expression RPAR statement) (stx:if-stmt $3 $5 `(,`()) $1-start-pos))
-     ((IF LPAR expression RPAR statement ELSE statement) (stx:if-stmt $3 $5 $7 $1-start-pos))
+     ((IF LPAR expression RPAR statement) (stx:if-stmt $3 $5 $1-start-pos))
+     ((IF LPAR expression RPAR statement ELSE statement) (stx:if-else-stmt $3 $5 $7 $1-start-pos))
      ((WHILE LPAR expression RPAR statement) (stx:while-stmt $3 $5 $1-start-pos))
      ((FOR LPAR expression-opt SEMI expression-opt
            SEMI expression-opt RPAR statement) (stx:for-stmt $3 $5 $7 $9 $1-start-pos))
@@ -229,7 +229,8 @@
 
 
 (define (syntax-sugar tree)
-  (cond ((list? tree) (map (lambda (x) (syntax-sugar x)) tree))
+  (cond ((null? tree) '())
+        ((list? tree) (map (lambda (x) (syntax-sugar x)) tree))
         ;for,単項のマイナス演算,配列参照式はシンタックスシュガーを適用する。
         ((stx:for-stmt? tree)
          (stx:compound-stmt
@@ -267,8 +268,10 @@
         ((stx:rop-exp? tree) (stx:rop-exp (syntax-sugar (stx:rop-exp-op tree)) (syntax-sugar (stx:rop-exp-left tree)) (syntax-sugar (stx:rop-exp-right tree))
                                           (stx:rop-exp-pos tree)))
         ((stx:assign-stmt? tree) (stx:assign-stmt (syntax-sugar (stx:assign-stmt-var tree)) (syntax-sugar (stx:assign-stmt-src tree)) (stx:assign-stmt-pos tree)))
-        ((stx:if-stmt? tree) (stx:if-stmt (syntax-sugar (stx:if-stmt-test tree)) (syntax-sugar (stx:if-stmt-tbody tree)) (syntax-sugar (stx:if-stmt-ebody))
-                                          (stx:if-stmt-pos tree)))
+        ((stx:if-else-stmt? tree) (stx:if-else-stmt (syntax-sugar (stx:if-else-stmt-test tree)) (syntax-sugar (stx:if-else-stmt-tbody tree)) (syntax-sugar (stx:if-else-stmt-ebody tree))
+                                         (stx:if-else-stmt-pos tree)))
+        ((stx:if-stmt? tree) (stx:if-else-stmt (syntax-sugar (stx:if-stmt-test tree)) (syntax-sugar (stx:if-stmt-tbody tree)) (stx:compound-stmt '() '() (stx:if-stmt-pos tree))
+                                         (stx:if-stmt-pos tree)))
         ((stx:while-stmt? tree) (stx:while-stmt (syntax-sugar (stx:while-stmt-test tree)) (syntax-sugar (stx:while-stmt-body tree)) (stx:while-stmt-pos tree)))
         ((stx:return-stmt? tree) (stx:return-stmt (syntax-sugar (stx:return-stmt-var tree)) (stx:return-stmt-pos tree)))
         ;((stx:int-id? tree)
