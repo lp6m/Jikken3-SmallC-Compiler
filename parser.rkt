@@ -107,15 +107,15 @@
      ((declarator-list COMMA declarator) `(,@$1 ,$3)))
     (declarator
      ((direct-declarator) `('() ,@$1));(stx:declarator-notpointer $1 $1-start-pos ))
-     ((* direct-declarator) `('* ,@$2)));(stx:declarator-pointer $2 $1-start-pos )))
+     ((* direct-declarator) `(,'* ,@$2)));(stx:declarator-pointer $2 $1-start-pos )))
     (direct-declarator
      ((ID) (list $1));(stx:direct-declarator-var $1 $1-start-pos))
-     ((ID LBBRA NUM RBBRA) `(,$1'array ,$3)));(stx:direct-declarator-array $1 $3 $1-start-pos)))
+     ((ID LBBRA NUM RBBRA) `(,$1 ,'array ,$3)));(stx:direct-declarator-array $1 $3 $1-start-pos)))
     (function-prototype
      ((type-specifier function-declarator SEMI) (stx:func-prototype (list $1 (car $2)) (cadr $2) (caddr $2) $1-start-pos)))
     (function-declarator ;func(a,b) *func(x,y)
      ((ID LPAR parameter-type-list-opt RPAR) `('() ,$1 ,$3));(stx:func-declarator-notpointer $1 $3 $1-start-pos))
-     ((* ID LPAR parameter-type-list-opt RPAR) `('* ,$2 ,$4)));(stx:func-declarator-pointer $2 $4 $1-start-pos)))
+     ((* ID LPAR parameter-type-list-opt RPAR) `(,'* ,$2 ,$4)));(stx:func-declarator-pointer $2 $4 $1-start-pos)))
     (function-definition
      ((type-specifier function-declarator compound-statement) (stx:func-definition $1 $2 $3 $1-start-pos)))
     (parameter-type-list-opt
@@ -127,8 +127,8 @@
     (parameter-declaration
      ((type-specifier parameter-declarator) (list $2 $1)));(stx:param-declaration $1 $2 $1-start-pos))) ;;should modify
     (parameter-declarator
-     ((ID) $1) 
-     ((* ID) (list '* $2)))
+     ((ID) `(,$1)) 
+     ((* ID) `(,'* ,$2)))
     (type-specifier
      ((INT) 'int);(stx:int-id $1-start-pos))
      ((VOID)'void));(stx:void-id $1-start-pos)))
@@ -284,5 +284,25 @@
                                                                 (stx:compound-stmt-pos tree)))
         (else tree)))
 
+;抽象構文木を受け取りSmallCのコードを返す関数
+(define (parse-reverser ast)
+  (define (main-program-reverse ast)
+    (cond
+      ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
+      ((stx:declaration? ast) (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)))
+      ((stx:func-prototype? ast) '())
+      ((stx:func-definition? ast) '())
+      ))
+  (define (dec-to-smallc dec) ;一つの変数宣言を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
+    (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
+         (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
+         (ispointer (if (symbol? (caddr dec)) (symbol->string (caddr dec)) "" ))
+         (type (if (symbol? (cadddr dec)) (symbol->string (cadddr dec)) ""))
+         (arraynum (if (not (equal? isarray "")) (number->string (caddr (cddr dec))) "")))
+         
+         (if (equal? isarray "array")
+             (cons type (string-append ispointer idname "[" arraynum "]"))
+             (cons type (string-append ispointer idname)))))
+  (main-program-reverse ast))
 
 
