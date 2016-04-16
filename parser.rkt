@@ -289,10 +289,17 @@
   (define (main-program-reverse ast)
     (cond
       ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
-      ((stx:declaration? ast) (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)))
-      ((stx:func-prototype? ast) '())
+      ((stx:declaration? ast) (declist-to-string (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
+      ((stx:func-prototype? ast) (func-prototype-to-smallc ast))
       ((stx:func-definition? ast) '())
       ))
+  (define (func-prototype-to-smallc ptype) '())
+   
+  (define (declist-to-string declist rst);consセルのリストから文字列を作成
+    (let ((commastr (if (not (= (length declist) 1)) ", " "")))
+      (cond ((null? declist) (string-append rst ";"))
+            ((equal? "" rst) (declist-to-string declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
+            (else (declist-to-string (cdr declist) (string-append rst (cdar declist) commastr))))))
   (define (dec-to-smallc dec) ;一つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
     (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
          (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
@@ -303,6 +310,7 @@
          (if (equal? isarray "array")
              (cons type (string-append ispointer idname "[" arraynum "]"))
              (cons type (string-append ispointer idname)))))
+    
   (main-program-reverse ast))
 
 
