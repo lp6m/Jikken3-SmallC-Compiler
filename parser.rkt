@@ -160,8 +160,8 @@
      (() '())
      ((expression) $1))
     (expression
-     ((assign-expr) $1)
-     ((expression COMMA assign-expr) (stx:expression $1 $3 $1-start-pos)))
+     ((assign-expr) (list $1))
+     ((expression COMMA assign-expr) (stx:expression `(,@$1 ,$3) $1-start-pos)))
     (assign-expr
      ((logical-or-expr) $1)
      ((logical-or-expr = assign-expr) (stx:assign-stmt $1 $3 $1-start-pos)));???
@@ -294,7 +294,44 @@
       ((stx:func-definition? ast) (func-definition-to-smallc ast))
       ))
   
-  (define (func-definition-to-smallc func-def) "")
+  (define (exp-tostr exp) ;返り値string
+    (cond ((symbol? exp) (symbol->string exp))
+          ((stx:lit-exp? exp) (number->string (stx:lit-exp-val exp)))
+          ((stx:var-exp? exp) (symbol->string (stx:var-exp-tgt exp)))
+          ((stx:neg-exp? exp) (string-append "-" (exp-tostr (stx:neg-exp-arg exp))))
+          ((stx:assign-stmt? exp) (string-append "(" (exp-tostr (stx:assign-stmt-var exp)) " = " (exp-tostr (stx:assign-stmt-src exp)) ")"))
+          ((stx:deref-exp? exp) (if (or (stx:var-exp? (stx:deref-exp-arg exp)) (stx:lit-exp? (stx:deref-exp-arg exp)))
+                                    (string-append "*" (exp-tostr (stx:deref-exp-arg exp)))
+                                    (string-append "*("(exp-tostr (stx:deref-exp-arg exp)) ")")))
+          ((stx:addr-exp? exp)  (if (or (stx:var-exp? (stx:addr-exp-var exp)) (stx:lit-exp? (stx:addr-exp-var exp)))
+                                    (string-append "&" (exp-tostr (stx:addr-exp-var exp)))
+                                    (string-append "&("(exp-tostr (stx:addr-exp-var exp)) ")")))
+          ((stx:array-exp? exp) (string-append (exp-tostr (stx:array-exp-tgt exp)) "[" (exp-tostr (stx:array-exp-index exp)) "]"))
+          ((stx:aop-exp? exp) (string-append "(" (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp)) ")"))
+          ((stx:rop-exp? exp) (string-append "(" (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp)) ")"))
+          ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (getwithcomma (stx:funccall-exp-paramlist exp)) ")")) 
+                              
+          (else "")))
+  (define (stmt-to-stronelist stmt);入れ子はなしで
+    (cond
+      ((null? stmt) (list ""))
+      ((stx:compound-stmt? stmt) `("{" ,@`(,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-declaration-list-opt stmt))
+                                               ,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-statement-list-opt stmt))) "}"))
+      ((stx:if-stmt? stmt) `(,(string-append "if (" (exp-tostr(stx:if-stmt-test stmt)) ")") ,@(stmt-to-stronelist (stx:if-stmt-tbody stmt)))) 
+      ((stx:if-else-stmt? stmt) `(,(string-append "if (" (exp-tostr(stx:if-else-stmt-test stmt)) ")") 
+                                  ,@(stmt-to-stronelist (stx:if-else-stmt-tbody stmt)) "else" 
+                                  ,@(stmt-to-stronelist (stx:if-else-stmt-ebody stmt)))) 
+      ((stx:for-stmt? stmt) `(,(string-append "for(" (exp-tostr (stx:for-stmt-initial stmt)) "; " (exp-tostr (stx:for-stmt-test stmt)) "; "
+                                       (exp-tostr (stx:for-stmt-repeat stmt)) ")") ,@(stmt-to-stronelist (stx:for-stmt-body stmt))))
+      ((stx:while-stmt? stmt) `(,(string-append "while(" (exp-tostr (stx:while-stmt-test stmt)) ") ") ,@(stmt-to-stronelist (stx:while-stmt-body stmt))))
+      ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)))))
+      ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
+      (else "a = 4+2;")))
+  (define (func-definition-to-smallc func-def) `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
+                                                      (func-id-tostr (stx:func-definition-id func-def))
+                                                      "(" (func-arglist-tostr (stx:func-definition-declarator func-def)) ")")
+                                                  ,@(stmt-to-stronelist (stx:func-definition-statement func-def))))
+  
   (define (func-ptype-to-smallc ptype) (string-append (func-functype-tostr (stx:func-prototype-type ptype))
                                                       (func-id-tostr (stx:func-prototype-id ptype))
                                                       "(" (func-arglist-tostr (stx:func-prototype-declarator ptype)) ");"))
@@ -329,7 +366,12 @@
          (if (equal? isarray "array")
              (cons type (string-append ispointer idname "[" arraynum "]"))
              (cons type (string-append ispointer idname)))))
-    
+  
+  (define (getwithcomma a)
+    (cond 
+      ((= (length a) 0) "")
+      ((= (length a) 1) (exp-tostr (car a)))
+      (else (string-append (exp-tostr (car a)) ", " (getwithcomma (cdr a)) ))))
   (main-program-reverse ast))
 
 
