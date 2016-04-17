@@ -41,10 +41,7 @@
 (struct for-stmt (initial test repeat body pos) #:transparent) 
 ;;RETURN
 (struct return-stmt (var pos) #:transparent)
-;;int,void
-(struct int-id (pos) #:transparent)
-(struct void-id (pos) #:transparent)
 ;;ORとAND
 (struct logical-and-or-expr (op log1 log2 pos) #:transparent)
 ;;
-(struct expression (exp assign-exp pos) #:transparent)
+(struct expression (explist pos) #:transparent)
