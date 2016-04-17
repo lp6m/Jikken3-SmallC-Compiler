@@ -311,6 +311,9 @@
           ((stx:aop-exp? exp) (string-append "(" (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp)) ")"))
           ((stx:rop-exp? exp) (string-append "(" (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp)) ")"))
           ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (getwithcomma (stx:funccall-exp-paramlist exp)) ")")) 
+          ((stx:logical-and-or-expr? exp) (let ((opstr (if (equal? (stx:logical-and-or-expr-op exp) 'and) " && " " || ")))
+                                            (string-append "("(exp-tostr (stx:logical-and-or-expr-log1 exp)) opstr 
+                                                           (exp-tostr (stx:logical-and-or-expr-log2 exp)) ")")))
                               
           (else "")))
   (define (stmt-to-stronelist stmt);入れ子はなしで
@@ -329,7 +332,7 @@
       ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)) ";")))
       ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
       ((stx:expression? stmt) `(,(string-append (getwithcomma (stx:expression-explist stmt)) ";")))
-      (else "a = 4+2;")))
+      (else "-----------error----------")))
   (define (func-definition-to-smallc func-def) `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
                                                       (func-id-tostr (stx:func-definition-id func-def))
                                                       "(" (func-arglist-tostr (stx:func-definition-declarator func-def)) ")")
