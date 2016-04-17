@@ -17,7 +17,7 @@ void calcprime(int arraynum){
 		}
 	}
 	for(i = 2; (i * i) < arraynum; i = i + 1){
-		for(j = i+1; j < arraynum; j = j + 2){
+		for(j = i+1; j < arraynum; j = j + 1){
 			shou = (j / i);
 			amari = j - (i * shou);
 			if(amari == 0) isprime[j] = 0;

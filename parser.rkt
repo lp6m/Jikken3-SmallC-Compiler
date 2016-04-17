@@ -160,8 +160,8 @@
      (() '())
      ((expression) $1))
     (expression
-     ((assign-expr) (list $1))
-     ((expression COMMA assign-expr) (stx:expression `(,@$1 ,$3) $1-start-pos)))
+     ((assign-expr) (stx:expression (list $1) $1-start-pos))
+     ((expression COMMA assign-expr) (stx:expression `(,@(stx:expression-explist $1) ,$3) $1-start-pos)))
     (assign-expr
      ((logical-or-expr) $1)
      ((logical-or-expr = assign-expr) (stx:assign-stmt $1 $3 $1-start-pos)));???
@@ -259,8 +259,8 @@
         ((stx:declaration? tree) (stx:declaration (syntax-sugar (stx:declaration-declist tree)) (stx:declaration-pos tree)))
         ((stx:func-prototype? tree) (stx:func-prototype (syntax-sugar (stx:func-prototype-type tree)) (syntax-sugar (stx:func-prototype-id tree))
                                                         (syntax-sugar (stx:func-prototype-declarator tree)) (stx:func-prototype-pos tree)))
-        ((stx:func-definition? tree) (stx:func-definition (syntax-sugar (stx:func-definition-type tree)) (syntax-sugar (stx:func-definition-declarator tree))
-                                                          (syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
+        ((stx:func-definition? tree) (stx:func-definition (syntax-sugar (stx:func-definition-type tree)) (syntax-sugar (stx:func-definition-id tree))
+                                                          (syntax-sugar (stx:func-definition-declarator tree))(syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
         ((stx:param-declaration? tree) (stx:param-declaration (syntax-sugar (stx:param-declaration-type tree)) (syntax-sugar (stx:param-declaration-declarator tree))
                                                               (stx:param-declaration-pos tree)))
         ((stx:aop-exp? tree) (stx:aop-exp (syntax-sugar (stx:aop-exp-op tree)) (syntax-sugar (stx:aop-exp-left tree)) (syntax-sugar (stx:aop-exp-right tree))
@@ -278,7 +278,7 @@
         ;((stx:void-id? tree)
         ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (syntax-sugar (stx:logical-and-or-expr-op tree)) (syntax-sugar (stx:logical-and-or-expr-log1 tree))
                                                                   (syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
-        ((stx:expression? tree) (stx:expression (syntax-sugar (stx:expression exp)) (syntax-sugar (stx:expression-assign-exp tree)) (stx:expression-pos tree)))
+        ((stx:expression? tree) (stx:expression (map (lambda (x) (syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
         ((stx:compound-stmt? tree) (stx:compound-stmt (syntax-sugar (stx:compound-stmt-declaration-list-opt tree))
                                                                 (syntax-sugar (stx:compound-stmt-statement-list-opt tree))
                                                                 (stx:compound-stmt-pos tree)))
@@ -296,6 +296,7 @@
   
   (define (exp-tostr exp) ;返り値string
     (cond ((symbol? exp) (symbol->string exp))
+          ((stx:expression? exp) (getwithcomma (stx:expression-explist exp)))
           ((stx:lit-exp? exp) (number->string (stx:lit-exp-val exp)))
           ((stx:var-exp? exp) (symbol->string (stx:var-exp-tgt exp)))
           ((stx:neg-exp? exp) (string-append "-" (exp-tostr (stx:neg-exp-arg exp))))
@@ -315,6 +316,7 @@
   (define (stmt-to-stronelist stmt);入れ子はなしで
     (cond
       ((null? stmt) (list ""))
+      ((stx:declaration? stmt) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist stmt)) ""))
       ((stx:compound-stmt? stmt) `("{" ,@`(,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-declaration-list-opt stmt))
                                                ,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-statement-list-opt stmt))) "}"))
       ((stx:if-stmt? stmt) `(,(string-append "if (" (exp-tostr(stx:if-stmt-test stmt)) ")") ,@(stmt-to-stronelist (stx:if-stmt-tbody stmt)))) 
@@ -324,8 +326,9 @@
       ((stx:for-stmt? stmt) `(,(string-append "for(" (exp-tostr (stx:for-stmt-initial stmt)) "; " (exp-tostr (stx:for-stmt-test stmt)) "; "
                                        (exp-tostr (stx:for-stmt-repeat stmt)) ")") ,@(stmt-to-stronelist (stx:for-stmt-body stmt))))
       ((stx:while-stmt? stmt) `(,(string-append "while(" (exp-tostr (stx:while-stmt-test stmt)) ") ") ,@(stmt-to-stronelist (stx:while-stmt-body stmt))))
-      ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)))))
+      ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)) ";")))
       ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
+      ((stx:expression? stmt) `(,(string-append (getwithcomma (stx:expression-explist stmt)) ";")))
       (else "a = 4+2;")))
   (define (func-definition-to-smallc func-def) `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
                                                       (func-id-tostr (stx:func-definition-id func-def))
@@ -372,6 +375,22 @@
       ((= (length a) 0) "")
       ((= (length a) 1) (exp-tostr (car a)))
       (else (string-append (exp-tostr (car a)) ", " (getwithcomma (cdr a)) ))))
-  (main-program-reverse ast))
+  
+  (define (fringe . lis);リストの葉の要素をすべてトップレベルに展開
+  (reverse (let loop  ((src lis)
+		       (dst '()))
+	     (cond ((null? src) dst)
+		   ((list? (car src))
+		    (loop (cdr src) (loop (car src) dst)))
+		   (else
+		    (loop (cdr src) (cons (car src) dst)))))))
+  (fringe (main-program-reverse ast)))
+
+
+(define (parse-reverse-port ast port)
+  (begin (display "#include <stdio.h>\n void print(int a){\n printf(\"%d \",a);\n}\n" port) (for-each (lambda (x) (begin (display x port) (newline port))) (parse-reverser ast)) (close-output-port port)))
+
+(define (parse-reverse-file ast outputfilename)
+  (parse-reverse-port ast (open-output-file outputfilename)))
 
 
