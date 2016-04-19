@@ -228,75 +228,75 @@
 
 
 
-(define (syntax-sugar tree)
+(define (remove-syntax-sugar tree)
   (cond ((null? tree) '())
-        ((list? tree) (map (lambda (x) (syntax-sugar x)) tree))
+        ((list? tree) (map (lambda (x) (remove-syntax-sugar x)) tree))
         ;for,単項のマイナス演算,配列参照式はシンタックスシュガーを適用する。
         ((stx:for-stmt? tree)
          (stx:compound-stmt
           '()
           (list
-           (syntax-sugar (stx:for-stmt-initial tree))
-           (stx:while-stmt (syntax-sugar (stx:for-stmt-test tree))
-                               (stx:compound-stmt '() (list  (syntax-sugar (stx:for-stmt-body tree)) (syntax-sugar (stx:for-stmt-repeat tree))) (stx:for-stmt-pos tree))
+           (remove-syntax-sugar (stx:for-stmt-initial tree))
+           (stx:while-stmt (remove-syntax-sugar (stx:for-stmt-test tree))
+                               (stx:compound-stmt '() (list  (remove-syntax-sugar (stx:for-stmt-body tree)) (remove-syntax-sugar (stx:for-stmt-repeat tree))) (stx:for-stmt-pos tree))
                                (stx:for-stmt-pos tree)))
           (stx:for-stmt-pos tree)))
-        ((stx:neg-exp? tree) (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
-        ((stx:deref-exp? tree)(stx:deref-exp (syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
+        ((stx:neg-exp? tree) (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
+        ((stx:deref-exp? tree)(stx:deref-exp (remove-syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
         ((stx:addr-exp? tree) 
-         (let ((x (syntax-sugar (stx:addr-exp-var tree))))
+         (let ((x (remove-syntax-sugar (stx:addr-exp-var tree))))
              (if (stx:deref-exp? x)
-                 (syntax-sugar (stx:deref-exp-arg x))
+                 (remove-syntax-sugar (stx:deref-exp-arg x))
                  (stx:addr-exp x (stx:addr-exp-pos tree)))))
-         ;(stx:addr-exp (syntax-sugar (stx:addr-exp-var tree)) (stx:addr-exp-pos tree)))
+         ;(stx:addr-exp (remove-syntax-sugar (stx:addr-exp-var tree)) (stx:addr-exp-pos tree)))
         ((stx:array-exp? tree) 
          (stx:deref-exp 
-          (stx:aop-exp '+ (syntax-sugar (stx:array-exp-tgt tree)) (syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))
+          (stx:aop-exp '+ (remove-syntax-sugar (stx:array-exp-tgt tree)) (remove-syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))
         
-        ((stx:lit-exp? tree) (stx:lit-exp (syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
-        ((stx:var-exp? tree) (stx:var-exp (syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
-        ((stx:funccall-exp? tree) (stx:funccall-exp (syntax-sugar (stx:funccall-exp-tgt tree)) (syntax-sugar (stx:funccall-exp-paramlist tree)) (stx:funccall-exp-pos tree)))
-        ((stx:declaration? tree) (stx:declaration (syntax-sugar (stx:declaration-declist tree)) (stx:declaration-pos tree)))
-        ((stx:func-prototype? tree) (stx:func-prototype (syntax-sugar (stx:func-prototype-type tree)) (syntax-sugar (stx:func-prototype-id tree))
-                                                        (syntax-sugar (stx:func-prototype-declarator tree)) (stx:func-prototype-pos tree)))
-        ((stx:func-definition? tree) (stx:func-definition (syntax-sugar (stx:func-definition-type tree)) (syntax-sugar (stx:func-definition-id tree))
-                                                          (syntax-sugar (stx:func-definition-declarator tree))(syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
-        ((stx:param-declaration? tree) (stx:param-declaration (syntax-sugar (stx:param-declaration-type tree)) (syntax-sugar (stx:param-declaration-declarator tree))
+        ((stx:lit-exp? tree) (stx:lit-exp (remove-syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
+        ((stx:var-exp? tree) (stx:var-exp (remove-syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
+        ((stx:funccall-exp? tree) (stx:funccall-exp (remove-syntax-sugar (stx:funccall-exp-tgt tree)) (remove-syntax-sugar (stx:funccall-exp-paramlist tree)) (stx:funccall-exp-pos tree)))
+        ((stx:declaration? tree) (stx:declaration (remove-syntax-sugar (stx:declaration-declist tree)) (stx:declaration-pos tree)))
+        ((stx:func-prototype? tree) (stx:func-prototype (remove-syntax-sugar (stx:func-prototype-type tree)) (remove-syntax-sugar (stx:func-prototype-id tree))
+                                                        (remove-syntax-sugar (stx:func-prototype-declarator tree)) (stx:func-prototype-pos tree)))
+        ((stx:func-definition? tree) (stx:func-definition (remove-syntax-sugar (stx:func-definition-type tree)) (remove-syntax-sugar (stx:func-definition-id tree))
+                                                          (remove-syntax-sugar (stx:func-definition-declarator tree))(remove-syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
+        ((stx:param-declaration? tree) (stx:param-declaration (remove-syntax-sugar (stx:param-declaration-type tree)) (remove-syntax-sugar (stx:param-declaration-declarator tree))
                                                               (stx:param-declaration-pos tree)))
-        ((stx:aop-exp? tree) (stx:aop-exp (syntax-sugar (stx:aop-exp-op tree)) (syntax-sugar (stx:aop-exp-left tree)) (syntax-sugar (stx:aop-exp-right tree))
+        ((stx:aop-exp? tree) (stx:aop-exp (remove-syntax-sugar (stx:aop-exp-op tree)) (remove-syntax-sugar (stx:aop-exp-left tree)) (remove-syntax-sugar (stx:aop-exp-right tree))
                                           (stx:aop-exp-pos tree)))
-        ((stx:rop-exp? tree) (stx:rop-exp (syntax-sugar (stx:rop-exp-op tree)) (syntax-sugar (stx:rop-exp-left tree)) (syntax-sugar (stx:rop-exp-right tree))
+        ((stx:rop-exp? tree) (stx:rop-exp (remove-syntax-sugar (stx:rop-exp-op tree)) (remove-syntax-sugar (stx:rop-exp-left tree)) (remove-syntax-sugar (stx:rop-exp-right tree))
                                           (stx:rop-exp-pos tree)))
-        ((stx:assign-stmt? tree) (stx:assign-stmt (syntax-sugar (stx:assign-stmt-var tree)) (syntax-sugar (stx:assign-stmt-src tree)) (stx:assign-stmt-pos tree)))
-        ((stx:if-else-stmt? tree) (stx:if-else-stmt (syntax-sugar (stx:if-else-stmt-test tree)) (syntax-sugar (stx:if-else-stmt-tbody tree)) (syntax-sugar (stx:if-else-stmt-ebody tree))
+        ((stx:assign-stmt? tree) (stx:assign-stmt (remove-syntax-sugar (stx:assign-stmt-var tree)) (remove-syntax-sugar (stx:assign-stmt-src tree)) (stx:assign-stmt-pos tree)))
+        ((stx:if-else-stmt? tree) (stx:if-else-stmt (remove-syntax-sugar (stx:if-else-stmt-test tree)) (remove-syntax-sugar (stx:if-else-stmt-tbody tree)) (remove-syntax-sugar (stx:if-else-stmt-ebody tree))
                                          (stx:if-else-stmt-pos tree)))
-        ((stx:if-stmt? tree) (stx:if-else-stmt (syntax-sugar (stx:if-stmt-test tree)) (syntax-sugar (stx:if-stmt-tbody tree)) (stx:compound-stmt '() '() (stx:if-stmt-pos tree))
+        ((stx:if-stmt? tree) (stx:if-else-stmt (remove-syntax-sugar (stx:if-stmt-test tree)) (remove-syntax-sugar (stx:if-stmt-tbody tree)) (stx:compound-stmt '() '() (stx:if-stmt-pos tree))
                                          (stx:if-stmt-pos tree)))
-        ((stx:while-stmt? tree) (stx:while-stmt (syntax-sugar (stx:while-stmt-test tree)) (syntax-sugar (stx:while-stmt-body tree)) (stx:while-stmt-pos tree)))
-        ((stx:return-stmt? tree) (stx:return-stmt (syntax-sugar (stx:return-stmt-var tree)) (stx:return-stmt-pos tree)))
+        ((stx:while-stmt? tree) (stx:while-stmt (remove-syntax-sugar (stx:while-stmt-test tree)) (remove-syntax-sugar (stx:while-stmt-body tree)) (stx:while-stmt-pos tree)))
+        ((stx:return-stmt? tree) (stx:return-stmt (remove-syntax-sugar (stx:return-stmt-var tree)) (stx:return-stmt-pos tree)))
         ;((stx:int-id? tree)
         ;((stx:void-id? tree)
-        ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (syntax-sugar (stx:logical-and-or-expr-op tree)) (syntax-sugar (stx:logical-and-or-expr-log1 tree))
-                                                                  (syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
-        ((stx:expression? tree) (stx:expression (map (lambda (x) (syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
-        ((stx:compound-stmt? tree) (stx:compound-stmt (syntax-sugar (stx:compound-stmt-declaration-list-opt tree))
-                                                                (syntax-sugar (stx:compound-stmt-statement-list-opt tree))
+        ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (remove-syntax-sugar (stx:logical-and-or-expr-op tree)) (remove-syntax-sugar (stx:logical-and-or-expr-log1 tree))
+                                                                  (remove-syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
+        ((stx:expression? tree) (stx:expression (map (lambda (x) (remove-syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
+        ((stx:compound-stmt? tree) (stx:compound-stmt (remove-syntax-sugar (stx:compound-stmt-declaration-list-opt tree))
+                                                                (remove-syntax-sugar (stx:compound-stmt-statement-list-opt tree))
                                                                 (stx:compound-stmt-pos tree)))
         (else tree)))
 
 ;抽象構文木を受け取りSmallCのコードを返す関数
 (define (parse-reverser ast)
-  (define (main-program-reverse ast)
+  (define (main-program-reverse ast);メイン部分:まずここが呼ばれる
     (cond
       ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
       ((stx:declaration? ast) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
       ((stx:func-prototype? ast) (func-ptype-to-smallc ast))
       ((stx:func-definition? ast) (func-definition-to-smallc ast))
       ))
-  
-  (define (exp-tostr exp) ;返り値string
+  ;---------------------------------expression-----------------------------------------------
+  (define (exp-tostr exp) ;expression構造体および中身のシンボルをstringに変換する
     (cond ((symbol? exp) (symbol->string exp))
-          ((stx:expression? exp) (getwithcomma (stx:expression-explist exp)))
+          ((stx:expression? exp) (get-exp-str-withcomma (stx:expression-explist exp)))
           ((stx:lit-exp? exp) (number->string (stx:lit-exp-val exp)))
           ((stx:var-exp? exp) (symbol->string (stx:var-exp-tgt exp)))
           ((stx:neg-exp? exp) (string-append "-" (exp-tostr (stx:neg-exp-arg exp))))
@@ -310,13 +310,20 @@
           ((stx:array-exp? exp) (string-append (exp-tostr (stx:array-exp-tgt exp)) "[" (exp-tostr (stx:array-exp-index exp)) "]"))
           ((stx:aop-exp? exp) (string-append "(" (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp)) ")"))
           ((stx:rop-exp? exp) (string-append "(" (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp)) ")"))
-          ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (getwithcomma (stx:funccall-exp-paramlist exp)) ")")) 
+          ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (get-exp-str-withcomma (stx:funccall-exp-paramlist exp)) ")")) 
           ((stx:logical-and-or-expr? exp) (let ((opstr (if (equal? (stx:logical-and-or-expr-op exp) 'and) " && " " || ")))
                                             (string-append "("(exp-tostr (stx:logical-and-or-expr-log1 exp)) opstr 
                                                            (exp-tostr (stx:logical-and-or-expr-log2 exp)) ")")))
                               
           (else "")))
-  (define (stmt-to-stronelist stmt);入れ子はなしで
+  (define (get-exp-str-withcomma a) ;複数のexpressionのリストを受け取ってstringに変換し、さらにそれらをカンマで区切ったものを返す
+      (cond 
+        ((= (length a) 0) "")
+        ((= (length a) 1) (exp-tostr (car a)))
+        (else (string-append (exp-tostr (car a)) ", " (get-exp-str-withcomma (cdr a)) ))))
+
+  ;---------------------------------statement-----------------------------------------------    
+  (define (stmt-to-stronelist stmt);1つstatementを入れ子のない、stringのリストに変換する
     (cond
       ((null? stmt) (list ""))
       ((stx:declaration? stmt) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist stmt)) ""))
@@ -331,16 +338,24 @@
       ((stx:while-stmt? stmt) `(,(string-append "while(" (exp-tostr (stx:while-stmt-test stmt)) ") ") ,@(stmt-to-stronelist (stx:while-stmt-body stmt))))
       ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)) ";")))
       ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
-      ((stx:expression? stmt) `(,(string-append (getwithcomma (stx:expression-explist stmt)) ";")))
+      ;statementとしてのexpressionは複数あればカンマ区切りで並べて最後にカンマをつける
+      ((stx:expression? stmt) `(,(string-append (get-exp-str-withcomma (stx:expression-explist stmt)) ";"))) 
+
       (else "-----------error----------")))
-  (define (func-definition-to-smallc func-def) `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
-                                                      (func-id-tostr (stx:func-definition-id func-def))
-                                                      "(" (func-arglist-tostr (stx:func-definition-declarator func-def)) ")")
-                                                  ,@(stmt-to-stronelist (stx:func-definition-statement func-def))))
-  
-  (define (func-ptype-to-smallc ptype) (string-append (func-functype-tostr (stx:func-prototype-type ptype))
-                                                      (func-id-tostr (stx:func-prototype-id ptype))
-                                                      "(" (func-arglist-tostr (stx:func-prototype-declarator ptype)) ");"))
+  ;---------------------------------関数定義-----------------------------------------------    
+  (define (func-definition-to-smallc func-def) ;関数定義構造体をstringのリストに変換する
+    `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
+                      (func-id-tostr (stx:func-definition-id func-def))
+                      "("
+                      (func-arglist-tostr (stx:func-definition-declarator func-def)) ")")
+      ,@(stmt-to-stronelist (stx:func-definition-statement func-def))))
+  ;---------------------------------関数宣言-----------------------------------------------    
+  (define (func-ptype-to-smallc ptype) 
+    (string-append (func-functype-tostr (stx:func-prototype-type ptype))
+                   (func-id-tostr (stx:func-prototype-id ptype))
+                   "("
+                   (func-arglist-tostr (stx:func-prototype-declarator ptype))
+                   ");"))
   (define (func-functype-tostr type)
     (let ((type-ato-str (if (null? (cadr type)) " " (string-append " " (symbol->string (cadr type))))))
       (string-append (symbol->string (car type)) type-ato-str)))
@@ -356,12 +371,13 @@
           (type (symbol->string (caddr arg)))
           (id (symbol->string (cadr arg))))
       (string-append type type-ato-str id)))
-                                                       
+  ;---------------------------------変数宣言-----------------------------------------------                                                        
   (define (declist-tostr declist rst);consセルのリストから文字列を作成
     (let ((commastr (if (not (= (length declist) 1)) ", " "")))
       (cond ((null? declist) (string-append rst ";"))
             ((equal? "" rst) (declist-tostr declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
             (else (declist-tostr (cdr declist) (string-append rst (cdar declist) commastr))))))
+
   (define (dec-to-smallc dec) ;1つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
     (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
          (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
@@ -373,27 +389,36 @@
              (cons type (string-append ispointer idname "[" arraynum "]"))
              (cons type (string-append ispointer idname)))))
   
-  (define (getwithcomma a)
-    (cond 
-      ((= (length a) 0) "")
-      ((= (length a) 1) (exp-tostr (car a)))
-      (else (string-append (exp-tostr (car a)) ", " (getwithcomma (cdr a)) ))))
-  
-  (define (fringe . lis);リストの葉の要素をすべてトップレベルに展開
-  (reverse (let loop  ((src lis)
-		       (dst '()))
+  ;以下は直接変換には関係ないもの
+  (define (fringe . lis);入れ子になったリストの要素をすべて展開したものを返す
+    (reverse (let loop  ((src lis)(dst '()))
 	     (cond ((null? src) dst)
 		   ((list? (car src))
 		    (loop (cdr src) (loop (car src) dst)))
-		   (else
-		    (loop (cdr src) (cons (car src) dst)))))))
+		   (else (loop (cdr src) (cons (car src) dst)))))))
+
+  (define (ProgramBeautifler programlist);stringのリストを受け取り,カッコに応じてタブを文頭につけて出力したときに見やすくする
+    (define (make-tab-string tabnum)
+      (cond ((= tabnum 0) "")
+            ((< tabnum 0) (error "unko"))
+            (else (string-append "\t" (make-tab-string (- tabnum 1))))))
+    (define (ProgramBeautiflerMain plist tabnum)
+      (cond ((= 1 (length plist)) plist)
+            ((equal? "{" (car plist)) `(,(string-append (make-tab-string tabnum) (car plist)) ,@(ProgramBeautiflerMain (cdr plist) (+ tabnum 1))))
+            ((equal? "}" (car plist)) `(,(string-append (make-tab-string (- tabnum 1))(car plist)) ,@(ProgramBeautiflerMain (cdr plist) (- tabnum 1))))
+            (else `(,(string-append (make-tab-string tabnum)(car plist)) ,@(ProgramBeautiflerMain (cdr plist) tabnum)))))
+    (ProgramBeautiflerMain programlist 0))
+  ;メイン.ここから開始する
   (fringe (main-program-reverse ast)))
 
 
 (define (parse-reverse-port ast port)
-  (begin (display "#include <stdio.h>\n void print(int a){\n printf(\"%d \",a);\n}\n" port) (for-each (lambda (x) (begin (display x port) (newline port))) (parse-reverser ast)) (close-output-port port)))
+  (let ((resultlist (parse-reverser ast)))
+  (begin (display "#include <stdio.h>\n void print(int a){\n printf(\"%d \",a);\n}\n" port) 
+         (for-each (lambda (x) (begin (display x port) (newline port))) resultlist)
+         (close-output-port port))))
 
+;抽象構文木を受け取り,ファイルに出力.すでにファイルが存在するときはエラーが発生する
 (define (parse-reverse-file ast outputfilename)
   (parse-reverse-port ast (open-output-file outputfilename)))
-
 

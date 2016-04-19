@@ -1,6 +1,7 @@
+int func(int a,int b);
 int main(){
-	int a,b;
-}
-int func(){
-	return 1;
+	int i,j;
+	for(i = 0; i < 10; i = i + 1){
+		print(i);
+	}
 }
