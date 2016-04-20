@@ -4,8 +4,7 @@ int isprime[1000];
 void calcprime(int arraynum){
 	int i,j;
 	int shou,amari;
-	i = 0;
-	j = 0;
+	i = 0,j = 0;
 	isprime[2] = 1;
 	for(i = 3; i < arraynum; i = i + 1){
 		shou = i / 2;

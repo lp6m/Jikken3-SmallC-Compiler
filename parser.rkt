@@ -409,7 +409,7 @@
             (else `(,(string-append (make-tab-string tabnum)(car plist)) ,@(ProgramBeautiflerMain (cdr plist) tabnum)))))
     (ProgramBeautiflerMain programlist 0))
   ;メイン.ここから開始する
-  (fringe (main-program-reverse ast)))
+  (ProgramBeautifler (fringe (main-program-reverse ast))))
 
 
 (define (parse-reverse-port ast port)
