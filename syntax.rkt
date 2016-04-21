@@ -21,8 +21,6 @@
 (struct func-prototype (type id declarator pos) #:transparent)
 ;関数宣言
 (struct func-definition (type id declarator statement pos) #:transparent)
-;変数宣言
-(struct param-declaration (type declarator pos) #:transparent)
 ;{}で挟まれた複文
 (struct compound-stmt (declaration-list-opt statement-list-opt pos) #:transparent)
 ;; 算術演算: <left-exp> <op> <right-exp>

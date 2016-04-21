@@ -266,8 +266,6 @@
         ;                                                (remove-syntax-sugar (stx:func-prototype-declarator tree)) (stx:func-prototype-pos tree)))
         ((stx:func-definition? tree) (stx:func-definition (stx:func-definition-type tree) (stx:func-definition-id tree)
                                                           (stx:func-definition-declarator tree) (remove-syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
-        ((stx:param-declaration? tree) (stx:param-declaration (remove-syntax-sugar (stx:param-declaration-type tree)) (remove-syntax-sugar (stx:param-declaration-declarator tree))
-                                                              (stx:param-declaration-pos tree)))
         ((stx:aop-exp? tree) (stx:aop-exp (remove-syntax-sugar (stx:aop-exp-op tree)) (remove-syntax-sugar (stx:aop-exp-left tree)) (remove-syntax-sugar (stx:aop-exp-right tree))
                                           (stx:aop-exp-pos tree)))
         ((stx:rop-exp? tree) (stx:rop-exp (remove-syntax-sugar (stx:rop-exp-op tree)) (remove-syntax-sugar (stx:rop-exp-left tree)) (remove-syntax-sugar (stx:rop-exp-right tree))
