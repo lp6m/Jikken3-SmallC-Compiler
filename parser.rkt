@@ -238,15 +238,18 @@
         ((stx:for-stmt? tree)
           (list
            (remove-syntax-sugar (stx:for-stmt-initial tree))
-           (stx:while-stmt (remove-syntax-sugar (stx:for-stmt-test tree))
-                               (stx:compound-stmt '()
-                                                  ;(list  (remove-syntax-sugar (stx:for-stmt-body tree)) (remove-syntax-sugar (stx:for-stmt-repeat tree)))
-                                                  (let ((for-compound (remove-syntax-sugar (stx:for-stmt-body tree))))
-                                                    `( ,@(stx:compound-stmt-declaration-list-opt for-compound)
-                                                       ,@(stx:compound-stmt-statement-list-opt for-compound)
-                                                         ,(remove-syntax-sugar (stx:for-stmt-repeat tree))))
-                                                  (stx:for-stmt-pos tree))
-                               (stx:for-stmt-pos tree))))
+           (stx:while-stmt (let ((for-test (remove-syntax-sugar (stx:for-stmt-test tree))))
+                             (if (null? for-test)               ;testがnullのときは無限ループなのでwhile(1)にする
+                                 (stx:lit-exp 1 (stx:for-stmt-pos tree))
+                                 for-test))
+                           (let ((for-body (remove-syntax-sugar (stx:for-stmt-body tree))))
+                             (if (stx:compound-stmt? for-body)  ;bodyはcompound-stmtとはかぎらないのでcompound-stmtかどうかで処理を分岐
+                                 (stx:compound-stmt `(,@(stx:compound-stmt-declaration-list-opt for-body))
+                                                    `(,@(stx:compound-stmt-statement-list-opt for-body)
+                                                      ,(remove-syntax-sugar (stx:for-stmt-repeat tree)))
+                                                    (stx:for-stmt-pos tree))
+                                 for-body))
+                           (stx:for-stmt-pos tree))))
         ((stx:neg-exp? tree) (stx:expression #t (list (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree))) (stx:neg-exp-pos tree)))
         ((stx:deref-exp? tree)(stx:deref-exp (remove-syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
         ((stx:addr-exp? tree) ;addr-の下が要素1個のexpressionでありそれがderefであれば外す
@@ -261,9 +264,6 @@
         ((stx:lit-exp? tree) (stx:lit-exp (remove-syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
         ((stx:var-exp? tree) (stx:var-exp (remove-syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
         ((stx:funccall-exp? tree) (stx:funccall-exp (remove-syntax-sugar (stx:funccall-exp-tgt tree)) (remove-syntax-sugar (stx:funccall-exp-paramlist tree)) (stx:funccall-exp-pos tree)))
-        ;((stx:declaration? tree) (stx:declaration (remove-syntax-sugar (stx:declaration-declist tree)) (stx:declaration-pos tree)))
-        ;((stx:func-prototype? tree) (stx:func-prototype (remove-syntax-sugar (stx:func-prototype-type tree)) (remove-syntax-sugar (stx:func-prototype-id tree))
-        ;                                                (remove-syntax-sugar (stx:func-prototype-declarator tree)) (stx:func-prototype-pos tree)))
         ((stx:func-definition? tree) (stx:func-definition (stx:func-definition-type tree) (stx:func-definition-id tree)
                                                           (stx:func-definition-declarator tree) (remove-syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
         ((stx:aop-exp? tree) (stx:aop-exp (remove-syntax-sugar (stx:aop-exp-op tree)) (remove-syntax-sugar (stx:aop-exp-left tree)) (remove-syntax-sugar (stx:aop-exp-right tree))
@@ -277,8 +277,6 @@
                                          (stx:if-stmt-pos tree)))
         ((stx:while-stmt? tree) (stx:while-stmt (remove-syntax-sugar (stx:while-stmt-test tree)) (remove-syntax-sugar (stx:while-stmt-body tree)) (stx:while-stmt-pos tree)))
         ((stx:return-stmt? tree) (stx:return-stmt (remove-syntax-sugar (stx:return-stmt-var tree)) (stx:return-stmt-pos tree)))
-        ;((stx:int-id? tree)
-        ;((stx:void-id? tree)
         ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (remove-syntax-sugar (stx:logical-and-or-expr-op tree)) (remove-syntax-sugar (stx:logical-and-or-expr-log1 tree))
                                                                   (remove-syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
         ((stx:expression? tree) (stx:expression (stx:expression-iskakko tree) (map (lambda (x) (remove-syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
@@ -331,7 +329,7 @@
   ;---------------------------------statement-----------------------------------------------    
   (define (stmt-to-stronelist stmt);1つstatementを入れ子のない、stringのリストに変換する
     (cond
-      ((null? stmt) (list ""))
+      ((null? stmt) (list ";"))
       ((stx:declaration? stmt) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist stmt)) ""))
       ((stx:compound-stmt? stmt) `("{" ,@`(,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-declaration-list-opt stmt))
                                                ,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-statement-list-opt stmt))) "}"))
