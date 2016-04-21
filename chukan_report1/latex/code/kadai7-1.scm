@@ -1,6 +1,0 @@
-> (define a (parse-file "chukan_report1/latex/code/sample2.sc"))
-> (define b (remove-syntax-sugar a))
-> a
-.........
-> b
-.........
