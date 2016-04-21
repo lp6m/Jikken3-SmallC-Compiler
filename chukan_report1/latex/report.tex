@@ -1,0 +1,48 @@
+\documentclass[a4paper]{jsarticle}
+\usepackage{amsmath}
+\usepackage{euler}
+\usepackage{ascmac}
+\usepackage{listings,jlisting}
+\usepackage{color}
+\usepackage[dvipdfmx]{graphicx}
+
+
+\lstdefinestyle{smallC}{
+  language={C},% 使用する言語
+  showstringspaces={false},% 半角スペースを表示するか（style に依存
+  frame={single},framesep={4pt},% 外枠の設定
+  %numbers={left},stepnumber={1},%numberstyle={\footnotesize},%,numbersep={1zw},% 行番号の設定
+  tabsize={4},% タブ幅を 2 に設定
+  breaklines={true},% 自動折り返しをオンに
+  basicstyle={\footnotesize},%
+  commentstyle={\itshape \color[rgb]{0.0,0.6,0.0}},%
+  keywordstyle={\bfseries \color[cmyk]{1.0,0.0,0.0,0.3}},%
+  stringstyle={\ttfamily \color[cmyk]{0.0, 1.0, 0.0, 0.0}}%
+}
+
+
+\lstdefinestyle{scheme}{
+  language={Lisp},
+  showstringspaces={false},% 半角スペースを表示するか（style に依存
+  frame={single},framesep={4pt}, %外枠の設定
+  %numbers={left},stepnumber={1},%numberstyle={\footnotesize},%numbersep={1zw},% 行番号の設定
+  tabsize={4},% タブ幅を 2 に設定 
+    breaklines={true},% 自動折り返しをオンに
+  basicstyle={\footnotesize},%
+  commentstyle={\itshape \color[rgb]{0.0,0.6,0.0}},%
+  keywordstyle={\bfseries \color[cmyk]{1.0,0.0,0.0,0.3}},%
+  stringstyle={\ttfamily \color[cmyk]{0.0, 1.0, 0.0, 0.0}}%
+}
+\begin{document}
+
+\title{計算機科学実験及び演習3 中間レポート \\ \bf 課題4,6,7}
+\author{\input{./name.txt}}
+\date{提出日: \today} % コンパイル時の日付が自動で挿入される
+\maketitle
+\section{課題4}
+\input{./kadai4.tex}
+\section{課題7}
+\input{./kadai7.tex}
+\section{課題6[選択]}
+\input{./kadai6.tex}
+\end{document}

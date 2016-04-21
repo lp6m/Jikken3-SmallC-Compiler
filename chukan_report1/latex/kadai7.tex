@@ -1,0 +1,15 @@
+\subsection{プログラム}
+プログラム:\textbf{parser.rkt, syntax.rkt}（課題4,6,7で共通）
+(remove-syntax-sugar 抽象構文木)でparse-file関数で生成した抽象構文木にシンタックスシュガーを取り除く.
+\subsection{プログラムの設計方針}
+parse-file関数で生成される抽象構文木は、様々な構造体が深くネストされており、構造体のメンバにさらに構造体を持っていたり、構造体のリストを持っていたりする.\\
+リストであれば、map関数でその一つ一つにシンタックスシュガーを取り除き,構造体であれば構造体のメンバそれぞれにシンタックスシュガーを取り除き,構造体を再構成する.
+\subsection{各部の説明}
+以下のようなSmallCコードを用意する.
+\lstinputlisting[caption = {sample2.sc},style=smallC]{./code/sample2.sc}
+Racketの対話環境でparse-file関数で生成された抽象構文木にremove-syntax-sugar関数を適用する.
+\lstinputlisting[caption = {},style=scheme]{./code/kadai7-1.scm}
+シンタックスシュガーを取り除く前の\textbf{a}と取り除いた後の\textbf{b}を以下に記載する.
+\lstinputlisting[caption = {シンタックスシュガーを取り除く前の抽象構文木},style=scheme]{./code/kadai7-a.scm}
+\lstinputlisting[caption = {シンタックスシュガーを取り除いた後の抽象構文木},style=scheme]{./code/kadai7-b.scm}
+以上のように,for文・配列参照・else節のないif文・単項のマイナス演算・\&(*e)のような式が書き換えられている.

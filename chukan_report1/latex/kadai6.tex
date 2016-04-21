@@ -1,0 +1,21 @@
+\subsection{プログラム}
+プログラム:\textbf{parser.rkt, syntax.rkt}（課題4,6,7で共通）
+\textbf{(parse-reverser ast)}で抽象構文木を受け取り,SmallCのコードを復元しstringのリストを返す.\\
+\textbf{(parse-reverse-file ast filename)}で抽象構文木を受け取り,SmallCのコードを復元しファイル名filenameに復元されたコードを出力する.\\
+復元されるコードにはgccでコンパイルすることができるように,include文とprint関数の定義も追加するようになっている.\\
+\subsection{プログラムの設計方針}
+抽象構文木が適切に生成されていれば,その抽象構文木は元のSmallCのプログラムの構造を忠実に保存しているから,元のSmallCのコードを復元することも容易である.\\
+式を復元する際に\textbf{()}で括らないと元のコードが正しく復元されない恐れがあるので、式はすべて\textbf{()}で括るようにした.
+\subsection{各部の説明}
+実際に,SmallCのプログラムを抽象構文木に変換し,それを元のSmallCプログラムに戻す.
+課題7で使用したものと同じコードを用意し,シンタックスシュガーを取り除く前のものと、取り除いた後のものをそれぞれSmallCに戻す.
+\lstinputlisting[caption = {},style=scheme]{./code/kadai6.scm}
+それぞれは以下のようになっている.
+\lstinputlisting[caption = {シンタックスシュガーを取り除く前の構文木をSmallCに復元したコード},style=smallC]{./code/out.c}
+\lstinputlisting[caption = {シンタックスシュガーを取り除いた後の構文木をSmallCに復元したコード},style=smallC]{./code/outremoved.c}
+また、簡単な1000までの素数を表示するプログラムをSmallCで作成し,それを構文木にしてからSmallCに復元したコードもここに記載する.
+これはgccでコンパイル出来、実行すると正常に動作した.
+\lstinputlisting[caption = {素数判定のプログラムを構文木にし,それをSmallCに復元したコード},style=smallC]{./code/prime_not_removed.c}
+さらに、シンタックスシュガーを取り除いてからSmallCに復元したコードが以下である.	
+\lstinputlisting[caption = {素数判定のプログラムを構文木にし,シンタックスシュガーをそれをSmallCに復元したコード},style=smallC]{./code/prime_removed.c}
+
