@@ -44,4 +44,4 @@
 ;;ORとAND
 (struct logical-and-or-expr (op log1 log2 pos) #:transparent)
 ;;
-(struct expression (explist pos) #:transparent)
+(struct expression (iskakko explist pos) #:transparent)

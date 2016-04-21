@@ -160,8 +160,8 @@
      (() '())
      ((expression) $1))
     (expression
-     ((assign-expr) (stx:expression (list $1) $1-start-pos))
-     ((expression COMMA assign-expr) (stx:expression `(,@(stx:expression-explist $1) ,$3) $1-start-pos)))
+     ((assign-expr) (stx:expression #f (list $1) $1-start-pos))
+     ((expression COMMA assign-expr) (stx:expression #f `(,@(stx:expression-explist $1) ,$3) $1-start-pos)))
     (assign-expr
      ((logical-or-expr) $1)
      ((logical-or-expr = assign-expr) (stx:assign-stmt $1 $3 $1-start-pos)));???
@@ -201,7 +201,7 @@
     (primary-expr  ;整数即値,変数,カッコで挟まれた式
      ((ID) (stx:var-exp $1 $1-start-pos))
      ((NUM)  (stx:lit-exp $1 $1-start-pos))
-     ((LPAR expression RPAR) $2))
+     ((LPAR expression RPAR) (let ((x $2)) (stx:expression #t (stx:expression-explist x) (stx:expression-pos x)))))
     (argument-expression-list-opt ;引数リスト "" or"4,2" ..etc..
      (() '())
      ((argument-expression-list) $1))
@@ -247,12 +247,12 @@
                                                          ,(remove-syntax-sugar (stx:for-stmt-repeat tree))))
                                                   (stx:for-stmt-pos tree))
                                (stx:for-stmt-pos tree))))
-        ((stx:neg-exp? tree) (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
+        ((stx:neg-exp? tree) (stx:expression #t (list (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree))) (stx:neg-exp-pos tree)))
         ((stx:deref-exp? tree)(stx:deref-exp (remove-syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
-        ((stx:addr-exp? tree) 
+        ((stx:addr-exp? tree) ;addr-の下が要素1個のexpressionでありそれがderefであれば外す
          (let ((x (remove-syntax-sugar (stx:addr-exp-var tree))))
-             (if (stx:deref-exp? x)
-                 (remove-syntax-sugar (stx:deref-exp-arg x))
+             (if (and (stx:expression? x) (stx:deref-exp? (car (stx:expression-explist x))))
+                 (remove-syntax-sugar (stx:deref-exp-arg (car (stx:expression-explist x))))
                  (stx:addr-exp x (stx:addr-exp-pos tree)))))
         ((stx:array-exp? tree) 
          (stx:deref-exp 
@@ -283,11 +283,12 @@
         ;((stx:void-id? tree)
         ((stx:logical-and-or-expr? tree) (stx:logical-and-or-expr (remove-syntax-sugar (stx:logical-and-or-expr-op tree)) (remove-syntax-sugar (stx:logical-and-or-expr-log1 tree))
                                                                   (remove-syntax-sugar (stx:logical-and-or-expr-log2 tree)) (stx:logical-and-or-expr-pos tree)))
-        ((stx:expression? tree) (stx:expression (map (lambda (x) (remove-syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
+        ((stx:expression? tree) (stx:expression (stx:expression-iskakko tree) (map (lambda (x) (remove-syntax-sugar x)) (stx:expression-explist tree)) (stx:expression-pos tree)))
         ((stx:compound-stmt? tree) (stx:compound-stmt (remove-syntax-sugar (stx:compound-stmt-declaration-list-opt tree))
                                                                 (remove-syntax-sugar (stx:compound-stmt-statement-list-opt tree))
                                                                 (stx:compound-stmt-pos tree)))
         (else tree)))
+
 
 ;抽象構文木を受け取りSmallCのコードを返す関数
 (define (parse-reverser ast)
@@ -301,11 +302,13 @@
   ;---------------------------------expression-----------------------------------------------
   (define (exp-tostr exp) ;expression構造体および中身のシンボルをstringに変換する
     (cond ((symbol? exp) (symbol->string exp))
-          ((stx:expression? exp) (get-exp-str-withcomma (stx:expression-explist exp)))
+          ((stx:expression? exp) (if (equal? #t (stx:expression-iskakko exp))
+                                     (string-append "(" (get-exp-str-withcomma (stx:expression-explist exp)) ")")
+                                     (get-exp-str-withcomma (stx:expression-explist exp))))
           ((stx:lit-exp? exp) (number->string (stx:lit-exp-val exp)))
           ((stx:var-exp? exp) (symbol->string (stx:var-exp-tgt exp)))
           ((stx:neg-exp? exp) (string-append "-" (exp-tostr (stx:neg-exp-arg exp))))
-          ((stx:assign-stmt? exp) (string-append "(" (exp-tostr (stx:assign-stmt-var exp)) " = " (exp-tostr (stx:assign-stmt-src exp)) ")"))
+          ((stx:assign-stmt? exp) (string-append (exp-tostr (stx:assign-stmt-var exp)) " = " (exp-tostr (stx:assign-stmt-src exp))))
           ((stx:deref-exp? exp) (if (or (stx:var-exp? (stx:deref-exp-arg exp)) (stx:lit-exp? (stx:deref-exp-arg exp)))
                                     (string-append "*" (exp-tostr (stx:deref-exp-arg exp)))
                                     (string-append "*("(exp-tostr (stx:deref-exp-arg exp)) ")")))
@@ -313,8 +316,8 @@
                                     (string-append "&" (exp-tostr (stx:addr-exp-var exp)))
                                     (string-append "&("(exp-tostr (stx:addr-exp-var exp)) ")")))
           ((stx:array-exp? exp) (string-append (exp-tostr (stx:array-exp-tgt exp)) "[" (exp-tostr (stx:array-exp-index exp)) "]"))
-          ((stx:aop-exp? exp) (string-append "(" (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp)) ")"))
-          ((stx:rop-exp? exp) (string-append "(" (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp)) ")"))
+          ((stx:aop-exp? exp) (string-append (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp))))
+          ((stx:rop-exp? exp) (string-append (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp))))
           ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (get-exp-str-withcomma (stx:funccall-exp-paramlist exp)) ")")) 
           ((stx:logical-and-or-expr? exp) (let ((opstr (if (equal? (stx:logical-and-or-expr-op exp) 'and) " && " " || ")))
                                             (string-append "("(exp-tostr (stx:logical-and-or-expr-log1 exp)) opstr 
@@ -344,7 +347,9 @@
       ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)) ";")))
       ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
       ;statementとしてのexpressionは複数あればカンマ区切りで並べて最後にカンマをつける
-      ((stx:expression? stmt) `(,(string-append (get-exp-str-withcomma (stx:expression-explist stmt)) ";"))) 
+      ((stx:expression? stmt) (if (equal? #t (stx:expression-iskakko stmt))
+                                  `(,(string-append "(" (get-exp-str-withcomma (stx:expression-explist stmt)) ")" ";"))
+                                  `(,(string-append (get-exp-str-withcomma (stx:expression-explist stmt)) ";")))) 
 
       (else "-----------error----------")))
   ;---------------------------------関数定義-----------------------------------------------    
@@ -437,4 +442,5 @@
         ((eq? 1 tree) (list 100 100))
         (else (* tree tree))))
              
+
 
