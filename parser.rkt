@@ -230,17 +230,23 @@
 
 (define (remove-syntax-sugar tree)
   (cond ((null? tree) '())
-        ((list? tree) (map (lambda (x) (remove-syntax-sugar x)) tree))
-        ;for,単項のマイナス演算,配列参照式はシンタックスシュガーを適用する。
+        ((list? tree) ;compound-stmt, declaration
+         (let* ((atama (remove-syntax-sugar (car tree))) (atamalist (if (list? atama) atama (list atama))))
+               (if (= 1 (length tree))
+                   atamalist
+                   (append atamalist (remove-syntax-sugar (cdr tree))))))
         ((stx:for-stmt? tree)
-         (stx:compound-stmt
-          '()
           (list
            (remove-syntax-sugar (stx:for-stmt-initial tree))
            (stx:while-stmt (remove-syntax-sugar (stx:for-stmt-test tree))
-                               (stx:compound-stmt '() (list  (remove-syntax-sugar (stx:for-stmt-body tree)) (remove-syntax-sugar (stx:for-stmt-repeat tree))) (stx:for-stmt-pos tree))
-                               (stx:for-stmt-pos tree)))
-          (stx:for-stmt-pos tree)))
+                               (stx:compound-stmt '()
+                                                  ;(list  (remove-syntax-sugar (stx:for-stmt-body tree)) (remove-syntax-sugar (stx:for-stmt-repeat tree)))
+                                                  (let ((for-compound (remove-syntax-sugar (stx:for-stmt-body tree))))
+                                                    `( ,@(stx:compound-stmt-declaration-list-opt for-compound)
+                                                       ,@(stx:compound-stmt-statement-list-opt for-compound)
+                                                         ,(remove-syntax-sugar (stx:for-stmt-repeat tree))))
+                                                  (stx:for-stmt-pos tree))
+                               (stx:for-stmt-pos tree))))
         ((stx:neg-exp? tree) (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree)))
         ((stx:deref-exp? tree)(stx:deref-exp (remove-syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
         ((stx:addr-exp? tree) 
@@ -248,7 +254,6 @@
              (if (stx:deref-exp? x)
                  (remove-syntax-sugar (stx:deref-exp-arg x))
                  (stx:addr-exp x (stx:addr-exp-pos tree)))))
-         ;(stx:addr-exp (remove-syntax-sugar (stx:addr-exp-var tree)) (stx:addr-exp-pos tree)))
         ((stx:array-exp? tree) 
          (stx:deref-exp 
           (stx:aop-exp '+ (remove-syntax-sugar (stx:array-exp-tgt tree)) (remove-syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))
@@ -421,4 +426,15 @@
 ;抽象構文木を受け取り,ファイルに出力.すでにファイルが存在するときはエラーが発生する
 (define (parse-reverse-file ast outputfilename)
   (parse-reverse-port ast (open-output-file outputfilename)))
+
+
+(define (test tree) ;forstmt用実験コード 1だけ100 100になる それいがいは2乗される
+  (cond ((list? tree) 
+         (let* ((atama (test (car tree))) (atamalist (if (list? atama) atama (list atama))))
+               (if (= 1 (length tree))
+                   atamalist
+                   (append atamalist (test (cdr tree))))))
+        ((eq? 1 tree) (list 100 100))
+        (else (* tree tree))))
+             
 
