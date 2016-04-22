@@ -1,6 +1,7 @@
 #lang racket
 (provide (all-defined-out))
-
+;変数宣言,プロトタイプ内パラメータ宣言,関数定義内パラメータ
+(struct var-decl (type id isarray ispointer num) #:transparent)
 ;; 整数即値: <num>
 (struct lit-exp    (val pos)           #:transparent)
 ;; 変数: <var>
@@ -18,9 +19,9 @@
 ;;変数宣言文
 (struct declaration (declist pos) #:transparent)
 ;関数定義
-(struct func-prototype (type id declarator pos) #:transparent)
+(struct func-prototype (var-decl declarator pos) #:transparent)
 ;関数宣言
-(struct func-definition (type id declarator statement pos) #:transparent)
+(struct func-definition (var-decl declarator statement pos) #:transparent)
 ;{}で挟まれた複文
 (struct compound-stmt (declaration-list-opt statement-list-opt pos) #:transparent)
 ;; 算術演算: <left-exp> <op> <right-exp>
