@@ -1,5 +1,4 @@
 #lang racket
-(provide (all-defined-out))
 (require parser-tools/lex
          (prefix-in : parser-tools/lex-sre)
          parser-tools/yacc
@@ -93,51 +92,32 @@
      ((function-prototype) $1)
      ((function-definition) $1))
     (declaration
-     ((type-specifier declarator-list SEMI) ;したのdeclarator-listでtypeのみはいってないからうめてやる
-      (stx:declaration (map (lambda (x) (stx:var-decl $1
-                                                      (stx:var-decl-id x)
-                                                      (stx:var-decl-isarray x)
-                                                      (stx:var-decl-ispointer x)
-                                                      (stx:var-decl-num x))) $2) $1-start-pos))) 
+     ((type-specifier declarator-list SEMI) 
+      (stx:declaration
+       (map (lambda (x) 
+              (let ((param (cadr x))
+                   (isarraylist (cddr x))
+                   (pointer_ka (car x)))
+                (if (null? isarraylist)
+                    (cons param `(,'() ,pointer_ka ,$1)) ;not array
+                    (cons param `(,(car isarraylist) ,pointer_ka ,$1 ,(cadr isarraylist)))))) $2) $1-start-pos)));array
+     ;((type-specifier declarator-list SEMI) (stx:declaration (map (lambda (x) (list  x $1)) $2) $1-start-pos)))
     (declarator-list
-     ((declarator) (list (let ((rstlist $1))
-                     (stx:var-decl '();typeは上declarationできめる
-                                   (cadr rstlist)
-                                   (equal? 'array (caddr rstlist))
-                                   (equal? '* (car rstlist))
-                                   (cadr (cddr rstlist))))))
-     ((declarator-list COMMA declarator) `(,@$1
-                                           ,(let ((rstlist $3))
-                                             (stx:var-decl '();typeは上declarationできめる
-                                                           (cadr rstlist)
-                                                           (equal? 'array (caddr rstlist))
-                                                           (equal? '* (car rstlist))
-                                                           (cadr (cddr rstlist)))))))
+     ((declarator) (list $1))
+     ((declarator-list COMMA declarator) `(,@$1 ,$3)))
     (declarator
      ((direct-declarator) `(,'() ,@$1));(stx:declarator-notpointer $1 $1-start-pos ))
      ((* direct-declarator) `(,'* ,@$2)));(stx:declarator-pointer $2 $1-start-pos )))
     (direct-declarator
-     ((ID) `(,$1 ,'() ,'()));(stx:direct-declarator-var $1 $1-start-pos))
+     ((ID) (list $1));(stx:direct-declarator-var $1 $1-start-pos))
      ((ID LBBRA NUM RBBRA) `(,$1 ,'array ,$3)));(stx:direct-declarator-array $1 $3 $1-start-pos)))
     (function-prototype
-     ((type-specifier function-declarator SEMI) 
-      (let ((type $1) (ispointer (equal? '* (car $2))) (id (cadr $2)) (isarray #f) (arraynum '()) (paramlist (caddr $2)))
-        (stx:func-prototype (stx:var-decl type id isarray ispointer arraynum)
-                            (map (lambda (x) (stx:var-decl (caddr x) (cadr x) #f (equal? '* (car x)) '())) paramlist)
-                            $1-start-pos))))
-                      
-      ;(stx:func-prototype (list $1 (car $2)) (cadr $2) (caddr $2) $1-start-pos)))
+     ((type-specifier function-declarator SEMI) (stx:func-prototype (list $1 (car $2)) (cadr $2) (caddr $2) $1-start-pos)))
     (function-declarator ;func(a,b) *func(x,y)
      ((ID LPAR parameter-type-list-opt RPAR) `(,'() ,$1 ,$3));(stx:func-declarator-notpointer $1 $3 $1-start-pos))
      ((* ID LPAR parameter-type-list-opt RPAR) `(,'* ,$2 ,$4)));(stx:func-declarator-pointer $2 $4 $1-start-pos)))
     (function-definition
-     ((type-specifier function-declarator compound-statement)
-      (let ((type $1) (ispointer (equal? '* (car $2))) (isarray #f) (arraynum '()) (id (cadr $2)) (paramlist (caddr $2)))
-        (stx:func-definition (stx:var-decl type id isarray ispointer arraynum)
-                             (map (lambda (x) (stx:var-decl (caddr x) (cadr x) #f (equal? '* (car x)) '())) paramlist)
-                             $3
-                              $1-start-pos))))
-      ;(stx:func-definition (list $1 (car $2)) (cadr $2) (caddr $2) $3 $1-start-pos)))
+     ((type-specifier function-declarator compound-statement) (stx:func-definition (list $1 (car $2)) (cadr $2) (caddr $2) $3 $1-start-pos)))
     (parameter-type-list-opt
      (() '())
      ((parameter-type-list) $1))
@@ -245,6 +225,9 @@
 (define (pretty-print-ast ast)
   (pretty-print ast))
 
+
+
+
 (define (remove-syntax-sugar tree)
   (cond ((null? tree) '())
         ((list? tree) ;compound-stmt, declaration
@@ -281,7 +264,7 @@
         ((stx:lit-exp? tree) (stx:lit-exp (remove-syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
         ((stx:var-exp? tree) (stx:var-exp (remove-syntax-sugar (stx:var-exp-tgt tree)) (stx:var-exp-pos tree)))
         ((stx:funccall-exp? tree) (stx:funccall-exp (remove-syntax-sugar (stx:funccall-exp-tgt tree)) (remove-syntax-sugar (stx:funccall-exp-paramlist tree)) (stx:funccall-exp-pos tree)))
-        ((stx:func-definition? tree) (stx:func-definition (stx:func-definition-var-decl tree)
+        ((stx:func-definition? tree) (stx:func-definition (stx:func-definition-type tree) (stx:func-definition-id tree)
                                                           (stx:func-definition-declarator tree) (remove-syntax-sugar (stx:func-definition-statement tree)) (stx:func-definition-pos tree)))
         ((stx:aop-exp? tree) (stx:aop-exp (remove-syntax-sugar (stx:aop-exp-op tree)) (remove-syntax-sugar (stx:aop-exp-left tree)) (remove-syntax-sugar (stx:aop-exp-right tree))
                                           (stx:aop-exp-pos tree)))
@@ -301,3 +284,159 @@
                                                                 (remove-syntax-sugar (stx:compound-stmt-statement-list-opt tree))
                                                                 (stx:compound-stmt-pos tree)))
         (else tree)))
+
+
+;抽象構文木を受け取りSmallCのコードを返す関数
+(define (parse-reverser ast)
+  (define (main-program-reverse ast);メイン部分:まずここが呼ばれる
+    (cond
+      ((list? ast) (map (lambda (x) (parse-reverser x)) ast))
+      ((stx:declaration? ast) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist ast)) ""))
+      ((stx:func-prototype? ast) (func-ptype-to-smallc ast))
+      ((stx:func-definition? ast) (func-definition-to-smallc ast))
+      ))
+  ;---------------------------------expression-----------------------------------------------
+  (define (exp-tostr exp) ;expression構造体および中身のシンボルをstringに変換する
+    (cond ((symbol? exp) (symbol->string exp))
+          ((stx:expression? exp) (if (equal? #t (stx:expression-iskakko exp))
+                                     (string-append "(" (get-exp-str-withcomma (stx:expression-explist exp)) ")")
+                                     (get-exp-str-withcomma (stx:expression-explist exp))))
+          ((stx:lit-exp? exp) (number->string (stx:lit-exp-val exp)))
+          ((stx:var-exp? exp) (symbol->string (stx:var-exp-tgt exp)))
+          ((stx:neg-exp? exp) (string-append "-" (exp-tostr (stx:neg-exp-arg exp))))
+          ((stx:assign-stmt? exp) (string-append (exp-tostr (stx:assign-stmt-var exp)) " = " (exp-tostr (stx:assign-stmt-src exp))))
+          ((stx:deref-exp? exp) (if (or (stx:var-exp? (stx:deref-exp-arg exp)) (stx:lit-exp? (stx:deref-exp-arg exp)))
+                                    (string-append "*" (exp-tostr (stx:deref-exp-arg exp)))
+                                    (string-append "*("(exp-tostr (stx:deref-exp-arg exp)) ")")))
+          ((stx:addr-exp? exp)  (if (or (stx:var-exp? (stx:addr-exp-var exp)) (stx:lit-exp? (stx:addr-exp-var exp)))
+                                    (string-append "&" (exp-tostr (stx:addr-exp-var exp)))
+                                    (string-append "&("(exp-tostr (stx:addr-exp-var exp)) ")")))
+          ((stx:array-exp? exp) (string-append (exp-tostr (stx:array-exp-tgt exp)) "[" (exp-tostr (stx:array-exp-index exp)) "]"))
+          ((stx:aop-exp? exp) (string-append (exp-tostr (stx:aop-exp-left exp)) " " (exp-tostr (stx:aop-exp-op exp)) " " (exp-tostr (stx:aop-exp-right exp))))
+          ((stx:rop-exp? exp) (string-append (exp-tostr (stx:rop-exp-left exp)) " " (exp-tostr (stx:rop-exp-op exp)) " " (exp-tostr (stx:rop-exp-right exp))))
+          ((stx:funccall-exp? exp) (string-append (exp-tostr (stx:funccall-exp-tgt exp)) "(" (get-exp-str-withcomma (stx:funccall-exp-paramlist exp)) ")")) 
+          ((stx:logical-and-or-expr? exp) (let ((opstr (if (equal? (stx:logical-and-or-expr-op exp) 'and) " && " " || ")))
+                                            (string-append "("(exp-tostr (stx:logical-and-or-expr-log1 exp)) opstr 
+                                                           (exp-tostr (stx:logical-and-or-expr-log2 exp)) ")")))
+                              
+          (else "")))
+  (define (get-exp-str-withcomma a) ;複数のexpressionのリストを受け取ってstringに変換し、さらにそれらをカンマで区切ったものを返す
+      (cond 
+        ((= (length a) 0) "")
+        ((= (length a) 1) (exp-tostr (car a)))
+        (else (string-append (exp-tostr (car a)) ", " (get-exp-str-withcomma (cdr a)) ))))
+
+  ;---------------------------------statement-----------------------------------------------    
+  (define (stmt-to-stronelist stmt);1つstatementを入れ子のない、stringのリストに変換する
+    (cond
+      ((null? stmt) (list ";"))
+      ((stx:declaration? stmt) (declist-tostr (map (lambda (x) (dec-to-smallc x)) (stx:declaration-declist stmt)) ""))
+      ((stx:compound-stmt? stmt) `("{" ,@`(,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-declaration-list-opt stmt))
+                                               ,@(map (lambda (x) (stmt-to-stronelist x)) (stx:compound-stmt-statement-list-opt stmt))) "}"))
+      ((stx:if-stmt? stmt) `(,(string-append "if (" (exp-tostr(stx:if-stmt-test stmt)) ")") ,@(stmt-to-stronelist (stx:if-stmt-tbody stmt)))) 
+      ((stx:if-else-stmt? stmt) `(,(string-append "if (" (exp-tostr(stx:if-else-stmt-test stmt)) ")") 
+                                  ,@(stmt-to-stronelist (stx:if-else-stmt-tbody stmt)) "else" 
+                                  ,@(stmt-to-stronelist (stx:if-else-stmt-ebody stmt)))) 
+      ((stx:for-stmt? stmt) `(,(string-append "for(" (exp-tostr (stx:for-stmt-initial stmt)) "; " (exp-tostr (stx:for-stmt-test stmt)) "; "
+                                       (exp-tostr (stx:for-stmt-repeat stmt)) ")") ,@(stmt-to-stronelist (stx:for-stmt-body stmt))))
+      ((stx:while-stmt? stmt) `(,(string-append "while(" (exp-tostr (stx:while-stmt-test stmt)) ") ") ,@(stmt-to-stronelist (stx:while-stmt-body stmt))))
+      ((stx:return-stmt? stmt) `(,(string-append "return " (exp-tostr (stx:return-stmt-var stmt)) ";")))
+      ((stx:assign-stmt? stmt) (string-append (exp-tostr (stx:assign-stmt-var stmt)) " = " (exp-tostr (stx:assign-stmt-src stmt)) ";"))
+      ;statementとしてのexpressionは複数あればカンマ区切りで並べて最後にカンマをつける
+      ((stx:expression? stmt) (if (equal? #t (stx:expression-iskakko stmt))
+                                  `(,(string-append "(" (get-exp-str-withcomma (stx:expression-explist stmt)) ")" ";"))
+                                  `(,(string-append (get-exp-str-withcomma (stx:expression-explist stmt)) ";")))) 
+
+      (else "-----------error----------")))
+  ;---------------------------------関数定義-----------------------------------------------    
+  (define (func-definition-to-smallc func-def) ;関数定義構造体をstringのリストに変換する
+    `(,(string-append (func-functype-tostr (stx:func-definition-type func-def))
+                      (func-id-tostr (stx:func-definition-id func-def))
+                      "("
+                      (func-arglist-tostr (stx:func-definition-declarator func-def)) ")")
+      ,@(stmt-to-stronelist (stx:func-definition-statement func-def))))
+  ;---------------------------------関数宣言-----------------------------------------------    
+  (define (func-ptype-to-smallc ptype) 
+    (string-append (func-functype-tostr (stx:func-prototype-type ptype))
+                   (func-id-tostr (stx:func-prototype-id ptype))
+                   "("
+                   (func-arglist-tostr (stx:func-prototype-declarator ptype))
+                   ");"))
+  (define (func-functype-tostr type)
+    (let ((type-ato-str (if (null? (cadr type)) " " (string-append " " (symbol->string (cadr type))))))
+      (string-append (symbol->string (car type)) type-ato-str)))
+  (define (func-id-tostr id) (symbol->string id))
+  (define (func-arglist-tostr arglist);引数宣言のリストをカンマ区切りの引数文字列に変換
+    (if (null? arglist)
+        "" ;引数0個
+        (if (= (length arglist) 1) 
+            (func-argument-tostr (car arglist))
+            (string-append (func-argument-tostr (car arglist)) ", " (func-arglist-tostr (cdr arglist))))))
+  (define (func-argument-tostr arg) ;1つの引数宣言(* a int)を"int *a"に変換
+    (let ((type-ato-str (if (null? (car arg)) " " (string-append " " (symbol->string (car arg)))))
+          (type (symbol->string (caddr arg)))
+          (id (symbol->string (cadr arg))))
+      (string-append type type-ato-str id)))
+  ;---------------------------------変数宣言-----------------------------------------------                                                        
+  (define (declist-tostr declist rst);consセルのリストから文字列を作成
+    (let ((commastr (if (not (= (length declist) 1)) ", " "")))
+      (cond ((null? declist) (string-append rst ";"))
+            ((equal? "" rst) (declist-tostr declist (string-append (caar declist) " "))) ;はじめは型の名前をいれる
+            (else (declist-tostr (cdr declist) (string-append rst (cdar declist) commastr))))))
+
+  (define (dec-to-smallc dec) ;1つの変数宣言(b () * int)や(c array () int 10))を文字列のconsセル変換 返り値は(cons "int" "*a")や(cons "int" "b[10]")
+    (let* ((idname (if (symbol? (car dec)) (symbol->string (car dec)) ""))
+         (isarray (if (symbol? (cadr dec)) (symbol->string (cadr dec)) "")) 
+         (ispointer (if (symbol? (caddr dec)) (symbol->string (caddr dec)) "" ))
+         (type (if (symbol? (cadddr dec)) (symbol->string (cadddr dec)) ""))
+         (arraynum (if (not (equal? isarray "")) (number->string (caddr (cddr dec))) "")))
+         
+         (if (equal? isarray "array")
+             (cons type (string-append ispointer idname "[" arraynum "]"))
+             (cons type (string-append ispointer idname)))))
+  
+  ;以下は直接変換には関係ないもの
+  (define (fringe . lis);入れ子になったリストの要素をすべて展開したものを返す
+    (reverse (let loop  ((src lis)(dst '()))
+	     (cond ((null? src) dst)
+		   ((list? (car src))
+		    (loop (cdr src) (loop (car src) dst)))
+		   (else (loop (cdr src) (cons (car src) dst)))))))
+
+  (define (ProgramBeautifler programlist);stringのリストを受け取り,カッコに応じてタブを文頭につけて出力したときに見やすくする
+    (define (make-tab-string tabnum)
+      (cond ((= tabnum 0) "")
+            ((< tabnum 0) (error "unko"))
+            (else (string-append "\t" (make-tab-string (- tabnum 1))))))
+    (define (ProgramBeautiflerMain plist tabnum)
+      (cond ((= 1 (length plist)) plist)
+            ((equal? "{" (car plist)) `(,(string-append (make-tab-string tabnum) (car plist)) ,@(ProgramBeautiflerMain (cdr plist) (+ tabnum 1))))
+            ((equal? "}" (car plist)) `(,(string-append (make-tab-string (- tabnum 1))(car plist)) ,@(ProgramBeautiflerMain (cdr plist) (- tabnum 1))))
+            (else `(,(string-append (make-tab-string tabnum)(car plist)) ,@(ProgramBeautiflerMain (cdr plist) tabnum)))))
+    (ProgramBeautiflerMain programlist 0))
+  ;メイン.ここから開始する
+  (ProgramBeautifler (fringe (main-program-reverse ast))))
+
+
+(define (parse-reverse-port ast port)
+  (let ((resultlist (parse-reverser ast)))
+  (begin (display "#include <stdio.h>\n void print(int a){\n printf(\"%d \",a);\n}\n" port) 
+         (for-each (lambda (x) (begin (display x port) (newline port))) resultlist)
+         (close-output-port port))))
+
+;抽象構文木を受け取り,ファイルに出力.すでにファイルが存在するときはエラーが発生する
+(define (parse-reverse-file ast outputfilename)
+  (parse-reverse-port ast (open-output-file outputfilename)))
+
+
+(define (test tree) ;forstmt用実験コード 1だけ100 100になる それいがいは2乗される
+  (cond ((list? tree) 
+         (let* ((atama (test (car tree))) (atamalist (if (list? atama) atama (list atama))))
+               (if (= 1 (length tree))
+                   atamalist
+                   (append atamalist (test (cdr tree))))))
+        ((eq? 1 tree) (list 100 100))
+        (else (* tree tree))))
+             
+
+
