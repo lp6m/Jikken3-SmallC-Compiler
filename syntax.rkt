@@ -42,5 +42,5 @@
 (struct return-stmt (var pos) #:transparent)
 ;;ORとAND
 (struct logical-and-or-expr (op log1 log2 pos) #:transparent)
-;;
+;;expression
 (struct expression (iskakko explist pos) #:transparent)
