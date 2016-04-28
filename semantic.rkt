@@ -28,36 +28,21 @@
          ((stx:func-prototype? ast)
           (if (null? (stx:func-prototype-declarator ast))
              `(,(var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)) ;パラメータがないとき
-             `(,(var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto) ,(map (lambda (x) (var-decl-toobj x (+ lev 1) 'parn)) (stx:func-prototype-declarator ast)))));パラメータがあるとき
+             `(,(var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto) ;パラメータがあるとき
+               ,(map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast)))))
          ((stx:func-definition? ast)
           (if (null? (stx:func-definition-declarator ast))
-             `(,(var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun))
-             `(,(var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun) ,(map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast)))))
+             `(,(var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)
+               ,(collect-object-main (stx:func-definition-statement ast) lev))
+             `(,(var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun) 
+               ,(map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-definition-declarator ast))
+               ,(collect-object-main (stx:func-definition-statement ast) lev))))
+         ((stx:compound-stmt? ast)
+          (if (null? (stx:compound-stmt-declaration-list-opt ast))
+              `()
+              (collect-object-main (stx:compound-stmt-declaration-list-opt ast) (+ 1 lev))))
          (else "unko")))
   (collect-object-main ast 0))
-
-
-(define initial-obj-collection (lambda (x) #f))
-(define now-step 1)
-(define (fresh-step)
-  (let([oldstep now-step]) (set! now-step (+ 1 now-step)) oldstep))
-(define (add-obj collection var);cons
-  (if (collection var)
-      (cons (collection var) collection)
-      (let ((new-step (fresh-step)))
-        (cons new-step
-             (lambda (x) 
-               (if (equal? x var) 
-                      new-step
-                      (collection x)))))))
-
-(define (add-obj-list-get-result objlist)
-  (define (add-obj-list-get-result-main collection objlist)
-    (if (= 1 (length objlist))
-      `(,(car (add-obj collection (car objlist))))
-      (let ((rst (add-obj collection (car objlist))))
-        `(,(car rst) ,@(add-obj-list-get-result-main (cdr rst) (cdr objlist))))))
-  (add-obj-list-get-result-main initial-obj-collection objlist))
 
 (define initial-env (list (lambda (x) #f)))
 (define (search-env env var);this env is envlist ;return var or #f
