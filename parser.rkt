@@ -235,11 +235,11 @@
 
 ;; 文字列を受け取って構文解析
 (define (parse-string str)
-  (parse-port (open-input-string str)))
+  (remove-syntax-sugar (parse-port (open-input-string str))))
 
 ;; ファイルを受け取って構文解析
 (define (parse-file fname)
-  (parse-port (open-input-file fname)))
+  (remove-syntax-sugar (parse-port (open-input-file fname))))
 
 ;; 抽象構文木(実は任意のRacketデータ)を見やすく表示
 (define (pretty-print-ast ast)
