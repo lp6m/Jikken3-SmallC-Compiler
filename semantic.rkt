@@ -1,4 +1,4 @@
-#lang racket
+ #lang racket
 (require (prefix-in parser: "parser.rkt")
          (prefix-in stx:    "syntax.rkt"))
 ;オブジェクト情報をもつ構造体
@@ -35,5 +35,63 @@
              `(,(var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun) ,(map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast)))))
          (else "unko")))
   (collect-object-main ast 0))
-         
+
+
+(define initial-obj-collection (lambda (x) #f))
+(define now-step 1)
+(define (fresh-step)
+  (let([oldstep now-step]) (set! now-step (+ 1 now-step)) oldstep))
+(define (add-obj collection var);cons
+  (if (collection var)
+      (cons (collection var) collection)
+      (let ((new-step (fresh-step)))
+        (cons new-step
+             (lambda (x) 
+               (if (equal? x var) 
+                      new-step
+                      (collection x)))))))
+
+(define (add-obj-list-get-result objlist)
+  (define (add-obj-list-get-result-main collection objlist)
+    (if (= 1 (length objlist))
+      `(,(car (add-obj collection (car objlist))))
+      (let ((rst (add-obj collection (car objlist))))
+        `(,(car rst) ,@(add-obj-list-get-result-main (cdr rst) (cdr objlist))))))
+  (add-obj-list-get-result-main initial-obj-collection objlist))
+
+(define initial-env (list (lambda (x) #f)))
+(define (search-env env var);this env is envlist ;return var or #f
+    (if (= (length env) 1)
+        ((car env) var) ;return from here
+        (if ((car env) var)
+            (car ((car env) var)) ;return from here
+            (search-env (cdr env) var))))
+(define (add-ref-env env var) 
+  (define (add-ref-env-main env var)
+    (let ((search-rst (search-env env var)))
+    (if search-rst
+        (cons var env) 
+        (let ((top-env (lambda (x) (if (equal? x var) var ((car env) var)))))
+          (if (null? (cdr env))
+              (cons var `(,top-env))
+              (cons var `(,top-env ,@(cdr env))))))))
+  (add-ref-env-main env var))
+        
+(define (env-test mylist)
+  (define (env-test-main env mylist)
+    (if (= 1 (length mylist))
+        `(,(car (add-ref-env env (car mylist))))
+        (let ((rst (add-ref-env env (car mylist))))
+          `(,(car rst) ,@(env-test-main (cdr rst) (cdr mylist))))))
+  (env-test-main initial-env mylist))
+
+(define (add-newenv env)
+  `(,@initial-env ,env))
+
+(define (pop-topenv env)
+  (cdr env))
+
+
+(struct a-st (x y) #:transparent)
+
                        
