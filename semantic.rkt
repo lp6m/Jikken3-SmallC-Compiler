@@ -144,24 +144,79 @@
 (define initial-env (list (lambda (x) #f)))
 ;lambda式のリストである環境からobj-nameが重複するものを検索をかける
 ;返り値はみつかったobjまたは#f
-(define (search-env env var)
+(define (search-env-by-obj-name env tgt-obj)
     (if (= (length env) 1)
-        ((car env) var) 
-        (if ((car env) var)
-            (car ((car env) var)) 
-            (search-env (cdr env) var))))
+        ((car env) tgt-obj) 
+        (if ((car env) tgt-obj)
+            (car ((car env) tgt-obj)) 
+            (search-env-by-obj-name (cdr env) tgt-obj))))
 
 ;環境からobjを参照し,なければ環境の先頭にobjを追加
-(define (add-ref-env env var) 
-  (define (add-ref-env-main env var)
-    (let ((search-rst (search-env env var)))
-    (if search-rst
-        (cons var env) 
-        (let ((top-env (lambda (x) (if (equal? x var) var ((car env) var)))))
-          (if (null? (cdr env))
-              (cons var `(,top-env))
-              (cons var `(,top-env ,@(cdr env))))))))
-  (add-ref-env-main env var))
+(define (add-ref-env env newobj) 
+  (define (add-ref-env-main env newobj)
+    ;newobjとnameが一致するobjを環境から検索
+    (let ((search-rst (search-env-by-obj-name env newobj)))
+      ;環境に新しく追加するオブジェクトの種類によって変更
+      (cond
+        ;新しいobjが変数宣言のとき
+        ((equal? (obj-kind newobj) 'var)
+         (if search-rst
+            ;既にnameが一致するオブジェクトが存在するとき
+            (let ((error-flg
+                   ;検索されたオブジェクトの種類によって処理を分岐
+                   (cond
+                     ;関数宣言で既にあるとき,その関数宣言のレベルが0であればエラー
+                     ((equal? (obj-kind search-rst) 'fun)
+                      (if (equal? 0 (obj-lev newobj))
+                         (error "functionとvarで同名の宣言は不可")
+                         #f))
+                     ;変数宣言で既にあるとき,新しいオブジェクトとレベルが同じならエラー
+                     ((equal? (obj-kind search-rst) 'var)
+                      (if (equal? (obj-lev newobj) (obj-lev search-rst))
+                         (error "既に同じレベルでの変数宣言があります")
+                         #f))
+                     ;関数パラメータで既にあるとき,警告を表示して登録
+                     ((equal? (obj-kind search-rst) 'parm)
+                      (begin (display "警告======!!") #f))
+                     (else (error "unknown obj-kind")))))
+              (if error-flg
+                 (error "ここにはこない")
+                 (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+                   (if (null? (cdr env))
+                      (cons newobj `(,top-env))
+                      (cons newobj `(,top-env ,@(cdr env)))))))
+            ;既にnameが一致するオブジェクトが存在しないとき→登録
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+              (if (null? (cdr env))
+                 (cons newobj `(,top-env))
+                 (cons newobj `(,top-env ,@(cdr env)))))))
+        ;新しいobjが関数パラメータ宣言のとき
+        ((equal? (obj-kind newobj) 'parm)
+         (if search-rst
+            ;既にnameが一致するオブジェクトが存在するとき
+            ;パラメータ二重宣言ならエラー
+            (if (equal? (obj-kind search-rst) 'parm)
+               (error "パラメータで二重宣言")
+               ;登録
+               (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+                 (if (null? (cdr env))
+                    (cons newobj `(,top-env))
+                    (cons newobj `(,top-env ,@(cdr env))))))
+            ;既にnameが一致するオブジェクトが存在しないとき→登録
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+              (if (null? (cdr env))
+                 (cons newobj `(,top-env))
+                 (cons newobj `(,top-env ,@(cdr env)))))))
+            )
+        ;新しいobjが関数プロトタイプ宣言のとき type(関数の型と引数の型情報）が一致してるかを調べ、一致しないならエラー 一致なら登録もせず元の環境をかえす
+        ((equal? (obj-kind newobj) 'proto)
+         (if (equal? ()
+        ;新しいobjが関数定義のとき→即エラー
+        ((equal? (obj-kind newobj) 'fun)
+         (error "関数の二重定義はエラー"))
+        (else (error "unknown obj-kind ")))))
+    
+  (add-ref-env-main env newobj))
         
 (define (env-test mylist)
   (define (env-test-main env mylist)
