@@ -33,23 +33,39 @@
        (stx:declaration
         (let ((declist (stx:declaration-declist ast))) (map (lambda (x) (var-decl-toobj x lev 'var)) declist))
         (stx:declaration-pos ast)))
-      ;stx:func-prototype
+      ;stx:func-prototype　'protoのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-prototype? ast)
-       (stx:func-prototype
-        (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)
-        (if (null? (stx:func-prototype-declarator ast))
-           `()
-          (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast)))
-        (stx:func-prototype-pos ast)))
-      ;stx:func-definition
+       (let* ((proto-declarator-objlist　　　　　　　;引数のobj構造体のリスト
+               (if (null? (stx:func-prototype-declarator ast))
+                  `()
+                  (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast))))
+               (proto-declarator-obj-typelist       ;引数のobjのtypeのリスト
+                (if (null? proto-declarator-objlist)
+                   `()
+                   (map (lambda (x) (obj-type x)) proto-declarator-objlist))))
+         ;protoのobj構造体のtypeに引数のtypeリストをappend
+         (stx:func-prototype
+          (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)))
+            (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))
+          proto-declarator-objlist
+          (stx:func-prototype-pos ast))))
+      ;stx:func-definition　'funのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-definition? ast)
-       (stx:func-definition
-        (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)
-        (if (null? (stx:func-definition-declarator ast))
-         `()
-         (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-definition-declarator ast)))
-        (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
-        (stx:func-definition-pos ast)))
+       (let* ((fun-declarator-objlist                ;引数のobj構造体のリスト
+               (if (null? (stx:func-definition-declarator ast))
+                  `()
+                  (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-definition-declarator ast))))
+              (fun-declarator-obj-typelist          ;引数のobjのtypeのリスト
+               (if (null? fun-declarator-objlist)
+                  `()
+                  (map (lambda (x) (obj-type x)) fun-declarator-objlist))))
+         ;funのobj構造体のtypeに引数のtypeリストをappend
+         (stx:func-definition
+          (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)))
+            (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist)))
+          fun-declarator-objlist
+          (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
+          (stx:func-definition-pos ast))))
       ;stx:compound-stmt
       ((stx:compound-stmt? ast)
        (stx:compound-stmt
