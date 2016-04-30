@@ -131,18 +131,27 @@
       ((stx:var-decl? ast) "var-declになることはないはずなのでエラーです")
       ;stx:lit-exp
       ((stx:lit-exp? ast) ast)
+      ;stx:var-exp
       ((stx:var-exp? ast) ast)
+      ;else
       (else ast)))
   
   (collect-object-main ast 0))
 
+;以下は環境のスタックを処理するための関数
+;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
+;パラメータ定義や関数
 (define initial-env (list (lambda (x) #f)))
-(define (search-env env var);this env is envlist ;return var or #f
+;lambda式のリストである環境からobj-nameが重複するものを検索をかける
+;返り値はみつかったobjまたは#f
+(define (search-env env var)
     (if (= (length env) 1)
-        ((car env) var) ;return from here
+        ((car env) var) 
         (if ((car env) var)
-            (car ((car env) var)) ;return from here
+            (car ((car env) var)) 
             (search-env (cdr env) var))))
+
+;環境からobjを参照し,なければ環境の先頭にobjを追加
 (define (add-ref-env env var) 
   (define (add-ref-env-main env var)
     (let ((search-rst (search-env env var)))
@@ -162,9 +171,11 @@
           `(,(car rst) ,@(env-test-main (cdr rst) (cdr mylist))))))
   (env-test-main initial-env mylist))
 
+;新しく環境のリストの先頭にlambda式を追加する
 (define (add-newenv env)
   `(,@initial-env ,env))
 
+;先頭の環境をpopする
 (define (pop-topenv env)
   (cdr env))
 
