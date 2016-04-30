@@ -207,10 +207,11 @@
               (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-            )
         ;新しいobjが関数プロトタイプ宣言のとき type(関数の型と引数の型情報）が一致してるかを調べ、一致しないならエラー 一致なら登録もせず元の環境をかえす
         ((equal? (obj-kind newobj) 'proto)
-         (if (equal? ()
+         (if (equal? (obj-type newobj) (obj-type search-rst))
+            (cons newobj env)
+            (error "型情報の違う二重プロトタイプ宣言はエラー")))
         ;新しいobjが関数定義のとき→即エラー
         ((equal? (obj-kind newobj) 'fun)
          (error "関数の二重定義はエラー"))
