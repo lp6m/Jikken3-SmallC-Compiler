@@ -104,14 +104,19 @@
           (stx:func-definition-pos ast))))
       ;stx:compound-stmt
       ((stx:compound-stmt? ast)
-       (stx:compound-stmt
-        (if (null? (stx:compound-stmt-declaration-list-opt ast))
-           `()
-           (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-declaration-list-opt ast)))
-        (if (null? (stx:compound-stmt-statement-list-opt ast))
-           `()
-           (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-statement-list-opt ast)))
-        (stx:compound-stmt-pos ast)))
+       (begin
+         (set! obj-env (add-new-level-to-env obj-env))        　　　　　　　　;新しいレベルを環境に追加
+         (let ((rst　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　;rstが評価する値 compound-stmtの中をチェック
+                (stx:compound-stmt
+               (if (null? (stx:compound-stmt-declaration-list-opt ast))
+                  `()
+                  (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-declaration-list-opt ast)))
+               (if (null? (stx:compound-stmt-statement-list-opt ast))
+                  `()
+                  (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-statement-list-opt ast)))
+               (stx:compound-stmt-pos ast))))
+           (set! obj-env (pop-top-env obj-env))　　　　　　　　　　　　　　　　　　;最後に新しいレベルの環境をpop
+           rst)))
       ;stx:expression
       ((stx:expression? ast)
        (stx:expression
