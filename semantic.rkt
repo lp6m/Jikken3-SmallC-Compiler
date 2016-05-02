@@ -184,8 +184,25 @@
       ;stx:lit-exp
       ((stx:lit-exp? ast) ast)
       ;stx:var-exp
-      ((stx:var-exp? ast) ast)
-      ;else
+      ;環境からnameが一致するものを探す
+      ((stx:var-exp? ast)
+       (let* ((dummy-obj (obj (stx:var-exp-tgt ast) 0 'var `())) ;seach-envはobj構造体との一致を調べるので検索用にvar-expをobj構造体に変換 name以外のメンバはダミー
+              (search-rst (search-env-by-obj-name obj-env dummy-obj)))         ;環境から検索
+         (if search-rst                                                                
+            (if (equal? 'var (obj-kind search-rst))                          ;見つかった場合,varとして宣言されているか確認
+               search-rst                                                                ;varであれば見つかったobjをかえす
+               (error "その変数は変数以外で宣言されています"))　　　　　　　 ;funやprotoとして定義されている
+            (error "その変数は未定義です"))))                                   ;見つからなかった場合,未定義
+      ;stx:func-call-exp
+      ((stx:funccall-exp? ast)
+       (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 'fun `())) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
+              (search-rst (search-env-by-obj-name obj-env dummy-obj)))
+         (if search-rst
+              (if (equal? 'fun (obj-kind search-rst))                               ;見つかった場合,funとして宣言されているか確認 （ちなみに,protoである可能性はない。BNF的に,かならずプロトタイプ宣言のあとに関数定義がある為。）
+                 search-rst                                                                    ;funであれば見つかったobjをかえす
+                 (error "関数以外で宣言されています"))                                 ;varやprotoとして定義されている
+              (error "その関数は未定義です"))))                                        ;見つからなかった場合,未定義
+       ;else
       (else ast)))
   
   (begin (set! obj-env initial-env) (collect-object-main ast 0)))
