@@ -6,6 +6,10 @@
 ;kind = var parm fun proto 
 ;type = (int), (pointer t), (array t n), (fun int/void a1 a2 ..)
 
+(define initial-env (list (lambda (x) #f)))
+;collect-objectで使う環境
+(define obj-env initial-env)
+
 ;parser.rkt内のparse-fileやparse-string関数で返る抽象構文木を受け取り,
 ;オブジェクト情報を収集して,2重宣言があれば即時エラーを吐く.
 ;返り値は、引数の抽象構文木内のstx:var-decl構造体を、レベル情報や宣言種類を含んだobj構造体に変換した抽象構文木.
@@ -24,6 +28,7 @@
    ;var-declからlev,kindを指定したobj構造体をかえす
   (define (var-decl-toobj decl lev kind)
     (obj (stx:var-decl-id decl) lev kind (var-decl-totype decl)))
+  
   ;メイン部分
   (define (collect-object-main ast lev)
     (cond
@@ -31,7 +36,12 @@
       ;stx:declaration
       ((stx:declaration? ast) 
        (stx:declaration
-        (let ((declist (stx:declaration-declist ast))) (map (lambda (x) (var-decl-toobj x lev 'var)) declist))
+        (let ((declist (stx:declaration-declist ast)))
+          (map
+           (lambda (x)
+             (let* ((newobj (var-decl-toobj x lev 'var))
+                    (rst (add-ref-env obj-env newobj)))　　　　　　　　　　　;環境にオブジェクトを追加した結果をrstに入れる
+               (begin (set! obj-env (cdr rst)) (car rst)))) declist))　　 ;環境を更新
         (stx:declaration-pos ast)))
       ;stx:func-prototype　'protoのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-prototype? ast)
@@ -42,13 +52,26 @@
                (proto-declarator-obj-typelist       ;引数のobjのtypeのリスト
                 (if (null? proto-declarator-objlist)
                    `()
-                   (map (lambda (x) (obj-type x)) proto-declarator-objlist))))
-         ;protoのobj構造体のtypeに引数のtypeリストをappend
+                   (map (lambda (x) (obj-type x)) proto-declarator-objlist)))
+               (proto-obj                                  ;protoのobj構造体.typeに引数の型情報が必要なので追加.具体的にはprotoのobj構造体のtypeに引数のtypeリストをappendする.
+                (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)))
+                  (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))))
+         ;返り値はここ
          (stx:func-prototype
-          (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)))
-            (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))
-          proto-declarator-objlist
+            (let* ((rst (add-ref-env  obj-env proto-obj)))　    ;プロトタイプ宣言のobjを環境に追加した結果をrstに入れる
+              (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
+              (car rst))　　　　　　　　　　　　　　　　　　　　　　　　　　　　 ;(car rst)がプロトタイプ宣言のobj
+            
+            (begin                                                               ;プロトタイプ宣言のパラメータのobjリスト
+              (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
+              (map (lambda (x)                                            ;パラメータを環境に追加していく
+                     (begin (let ((rst (add-ref-env obj-env x)))
+                              (set! obj-env (cdr rst)))))
+                  proto-declarator-objlist)
+              (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
+              proto-declarator-objlist)
           (stx:func-prototype-pos ast))))
+      
       ;stx:func-definition　'funのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-definition? ast)
        (let* ((fun-declarator-objlist                ;引数のobj構造体のリスト
@@ -58,12 +81,25 @@
               (fun-declarator-obj-typelist          ;引数のobjのtypeのリスト
                (if (null? fun-declarator-objlist)
                   `()
-                  (map (lambda (x) (obj-type x)) fun-declarator-objlist))))
-         ;funのobj構造体のtypeに引数のtypeリストをappend
+                  (map (lambda (x) (obj-type x)) fun-declarator-objlist)))
+              (def-obj　　　　　　　　　　　　　　　　　　　;funのobj構造体.typeに引数の型情報が必要なので追加.具体的にはfunのobj構造体のtypeに引数のtypeリストをappendする.
+                (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)))
+                  (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist))))
+                )
+         
          (stx:func-definition
-          (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)))
-            (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist)))
-          fun-declarator-objlist
+            (let* ((rst (add-ref-env  obj-env def-obj)))       　;関数定義のobjを環境に追加した結果をrstに入れる
+              (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
+              (car rst))                                                         ;(car rst)が関数定義のobj
+            
+            (begin                                                               ;関数定義のパラメータのobjリスト
+              (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
+              (map (lambda (x)                                            ;パラメータを環境に追加していく
+                     (begin (let ((rst (add-ref-env obj-env x)))
+                              (set! obj-env (cdr rst)))))
+                  fun-declarator-objlist)
+              (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
+              fun-declarator-objlist)
           (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
           (stx:func-definition-pos ast))))
       ;stx:compound-stmt
@@ -144,7 +180,7 @@
         (collect-object-main (stx:deref-exp-arg ast) lev)
         (stx:deref-exp-pos ast)))
       ;stx:var-decl
-      ((stx:var-decl? ast) "var-declになることはないはずなのでエラーです")
+      ((stx:var-decl? ast) (error "var-declになることはないはずなので木の巡回エラーです"))
       ;stx:lit-exp
       ((stx:lit-exp? ast) ast)
       ;stx:var-exp
@@ -152,26 +188,26 @@
       ;else
       (else ast)))
   
-  (collect-object-main ast 0))
+  (begin (set! obj-env initial-env) (collect-object-main ast 0)))
 
 ;以下は環境のスタックを処理するための関数
 ;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
 ;パラメータ定義や関数
-(define initial-env (list (lambda (x) #f)))
+
 ;lambda式のリストである環境からobj-nameが重複するものを検索をかける
 ;返り値はみつかったobjまたは#f
 (define (search-env-by-obj-name env tgt-obj)
     (if (= (length env) 1)
-        ((car env) tgt-obj) 
-        (if ((car env) tgt-obj)
-            (car ((car env) tgt-obj)) 
-            (search-env-by-obj-name (cdr env) tgt-obj))))
+       ((car env) tgt-obj) 
+       (if ((car env) tgt-obj)
+          ((car env) tgt-obj)
+          (search-env-by-obj-name (cdr env) tgt-obj))))
 
 ;環境からobjを参照し,なければ環境の先頭にobjを追加
 (define (add-ref-env env newobj) 
   (define (add-ref-env-main env newobj)
     ;newobjとnameが一致するobjを環境から検索
-    (let ((search-rst (search-env-by-obj-name env newobj)))
+    (let* ((search-rst (search-env-by-obj-name env newobj))); (hoge (display search-rst)))
       ;環境に新しく追加するオブジェクトの種類によって変更
       (cond
         ;新しいobjが変数宣言のとき
@@ -197,12 +233,12 @@
                      (else (error "unknown obj-kind")))))
               (if error-flg
                  (error "ここにはこない")
-                 (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+                 (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                    (if (null? (cdr env))
                       (cons newobj `(,top-env))
                       (cons newobj `(,top-env ,@(cdr env)))))))
             ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
               (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
@@ -214,23 +250,38 @@
             (if (equal? (obj-kind search-rst) 'parm)
                (error "パラメータで二重宣言")
                ;登録
-               (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+               (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                  (if (null? (cdr env))
                     (cons newobj `(,top-env))
                     (cons newobj `(,top-env ,@(cdr env))))))
             ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) newobj)))))
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
               (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
         ;新しいobjが関数プロトタイプ宣言のとき type(関数の型と引数の型情報）が一致してるかを調べ、一致しないならエラー 一致なら登録もせず元の環境をかえす
         ((equal? (obj-kind newobj) 'proto)
-         (if (equal? (obj-type newobj) (obj-type search-rst))
-            (cons newobj env)
-            (error "型情報の違う二重プロトタイプ宣言はエラー")))
-        ;新しいobjが関数定義のとき→即エラー
+         (if search-rst
+            ;既にnameが一致するオブジェクトが存在するとき
+            (if (equal? (obj-type newobj) (obj-type search-rst))
+               (cons newobj env) 　　　　　　　　　　　　　　　　　　　　;型情報が既に存在するものと一致する場合、更新せずにかえす
+               (error "型情報の違う二重プロトタイプ宣言はエラー"))
+            ;既にnameが一致するオブジェクトが存在しないとき→登録
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+              (if (null? (cdr env))
+                 (cons newobj `(,top-env))
+                 (cons newobj `(,top-env ,@(cdr env)))))))
+            
+        ;新しいobjが関数定義のとき
         ((equal? (obj-kind newobj) 'fun)
-         (error "関数の二重定義はエラー"))
+         (if search-rst
+            ;既にnameが一致するオブジェクトが存在するとき→エラー
+            (error "関数の二重定義はエラー")
+            ;既にnameが一致するオブジェクトが存在しないとき→登録
+            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+              (if (null? (cdr env))
+                 (cons newobj `(,top-env))
+                 (cons newobj `(,top-env ,@(cdr env)))))))
         (else (error "unknown obj-kind ")))))
     
   (add-ref-env-main env newobj))
@@ -239,16 +290,16 @@
   (define (env-test-main env mylist)
     (if (= 1 (length mylist))
         `(,(car (add-ref-env env (car mylist))))
-        (let ((rst (add-ref-env env (car mylist))))
-          `(,(car rst) ,@(env-test-main (cdr rst) (cdr mylist))))))
+        (begin
+          (set! env (add-new-level-to-env env))
+          (let ((rst (add-ref-env env (car mylist))))
+            `(,(car rst) ,@(env-test-main (cdr rst) (cdr mylist)))))))
   (env-test-main initial-env mylist))
 
 ;新しく環境のリストの先頭にlambda式を追加する
-(define (add-newenv env)
-  `(,@initial-env ,env))
+(define (add-new-level-to-env env)
+  (append initial-env env))
 
 ;先頭の環境をpopする
-(define (pop-topenv env)
+(define (pop-top-env env)
   (cdr env))
-
-                       
