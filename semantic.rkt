@@ -85,23 +85,28 @@
               (def-obj　　　　　　　　　　　　　　　　　　　;funのobj構造体.typeに引数の型情報が必要なので追加.具体的にはfunのobj構造体のtypeに引数のtypeリストをappendする.
                 (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)))
                   (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist))))
-                )
+                
          
-         (stx:func-definition
-            (let* ((rst (add-ref-env  obj-env def-obj)))       　;関数定義のobjを環境に追加した結果をrstに入れる
-              (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
-              (car rst))                                                         ;(car rst)が関数定義のobj
-            
-            (begin                                                               ;関数定義のパラメータのobjリスト
-              (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
-              (map (lambda (x)                                            ;パラメータを環境に追加していく
-                     (begin (let ((rst (add-ref-env obj-env x)))
-                              (set! obj-env (cdr rst)))))
+         (func-def-rst
+          (stx:func-definition
+           (let* ((rst (add-ref-env  obj-env def-obj)))       　;関数定義のobjを環境に追加した結果をrstに入れる
+             (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
+             (car rst))                                                         ;(car rst)が関数定義のobj
+           
+           (begin                                                               ;関数定義のパラメータのobjリスト
+             (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
+             (map (lambda (x)                                            ;パラメータを環境に追加していく
+                    (begin (let ((rst (add-ref-env obj-env x)))
+                             (set! obj-env (cdr rst)))))
                   fun-declarator-objlist)
-              (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
-              fun-declarator-objlist)
-          (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
-          (stx:func-definition-pos ast))))
+             
+             fun-declarator-objlist)
+           (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
+           (stx:func-definition-pos ast))))
+         (begin
+           (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
+           func-def-rst)))
+           
       ;stx:compound-stmt
       ((stx:compound-stmt? ast)
        (begin
@@ -194,10 +199,10 @@
        (let* ((dummy-obj (obj (stx:var-exp-tgt ast) 0 'var `())) ;seach-envはobj構造体との一致を調べるので検索用にvar-expをobj構造体に変換 name以外のメンバはダミー
               (search-rst (search-env-by-obj-name obj-env dummy-obj)))         ;環境から検索
          (if search-rst                                                                
-            (if (equal? 'var (obj-kind search-rst))                          ;見つかった場合,varとして宣言されているか確認
-               search-rst                                                                ;varであれば見つかったobjをかえす
-               (error "その変数は変数以外で宣言されています"))　　　　　　　 ;funやprotoとして定義されている
-            (error "その変数は未定義です"))))                                   ;見つからなかった場合,未定義
+            (if (or (equal? 'var (obj-kind search-rst)) (equal? 'parm (obj-kind search-rst)))                          ;見つかった場合,varかparmとして宣言されているか確認
+               search-rst                                                                ;varかparmであれば見つかったobjをかえす
+               (begin (display ast) (error "その変数は変数またはパラメータ以外で宣言されています")))　　　　　　　 ;funやprotoとして定義されている
+            (begin (display ast) (error "その変数は未定義です")))))                                   ;見つからなかった場合,未定義
       ;stx:func-call-exp
       ((stx:funccall-exp? ast)
        (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 'fun `())) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
