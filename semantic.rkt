@@ -101,7 +101,7 @@
                   fun-declarator-objlist)
              
              fun-declarator-objlist)
-           (collect-object-main (stx:func-definition-statement ast) (+ lev 1))
+           (collect-object-main (stx:func-definition-statement ast) (+ lev 1));compound-stmtの中身を展開（オブジェクト情報を収集）
            (stx:func-definition-pos ast))))
          (begin
            (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
@@ -217,7 +217,7 @@
   
   (begin (set! obj-env initial-env) (collect-object-main ast 0)))
 
-;以下は環境のスタックを処理するための関数
+;環境のスタックを処理するための関数
 ;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
 ;パラメータ定義や関数
 
@@ -330,3 +330,58 @@
 ;先頭の環境をpopする
 (define (pop-top-env env)
   (cdr env))
+
+;型検査をする関数 collect-object関数によりobj構造体をうめこまれたあとの抽象構文木をうけとって型検査をする
+;返り値は#tまたは型のリスト 型違反があれば即時エラーを出力する.
+;#tはwell-typedを意味する.
+(define (type-check ast)
+  ;オブジェクトの型情報をチェックする.返り値は#tまたは即時エラー
+  (define (obj-check tgt-obj)
+    (cond
+      ((equal? 'var (obj-kind tgt-obj))
+       
+      
+  (define (type-check-main ast)
+    (cond
+      ;ここを通過するのはプログラムのrootのみ.つまりstx:declarationとstx:func-prototypeとstx:func-definitionが並んだリストしかここを通らない
+      ;すべてエラーなく通過した場合すべて#tを返すので返り値は#tになる
+      ((list? ast)
+       (if (= 1 (length ast)) (type-check (car ast)) (and (type-check (car ast) (type-check (cdr ast))))))
+      ;stx:declaration
+      ((stx:declaration? ast) #t)
+      ;stx:func-prototype
+      ((stx:func-prototype? ast) #t)
+      ;stx:func-definition
+      ;関数本体がwell-typedならwell-typed
+      ((stx:func-definition? ast)
+       (if (equal? #t (type-check (stx:func-definition-statement ast)))
+          #t
+          #f))
+      ;stx:compound-stmt
+      ((stx:compound-stmt? ast) `())
+      ;stx:expression
+      ((stx:expression? ast) `())
+      ;stx:funccall-exp
+      ((stx:funccall-exp? ast) `())
+      ;stx:aop-exp
+      ((stx:aop-exp? ast) `())
+      ;stx:rop-exp
+      ((stx:rop-exp? ast) `())
+      ;stx:assign-stmt
+      ((stx:assign-stmt? ast) `())
+      ;stx:while-stmt
+      ((stx:while-stmt? ast) `())
+      ;stx:if-else-stmt
+      ((stx:if-else-stmt? ast) `())
+      ;stx:return-stmt
+      ((stx:return-stmt? ast) `())
+      ;stx:logical-and-or-expr
+      ((stx:logical-and-or-expr? ast) `())
+      ;stx;addr-exp
+      ((stx:addr-exp? ast) `())
+      ;stx:deref-exp
+      ((stx:deref-exp? ast) `())
+      ;stx:lit-exp
+      ((stx:lit-exp? ast) `())
+      (else `())))
+  (type-check-main ast))
