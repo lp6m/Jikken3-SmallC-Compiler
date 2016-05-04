@@ -336,9 +336,7 @@
 ;#tはwell-typedを意味する.
 (define (type-check ast)
   ;オブジェクトの型情報をチェックする.返り値は#tまたは即時エラー
-  (define (obj-check tgt-obj)
-    (cond
-      ((equal? 'var (obj-kind tgt-obj))
+  
        
       
   (define (type-check-main ast)
