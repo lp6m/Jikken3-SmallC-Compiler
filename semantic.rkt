@@ -331,55 +331,158 @@
 (define (pop-top-env env)
   (cdr env))
 
+;型検査用.型情報を扱う構造体 こっちのほうが扱いやすい
+(struct type-struct (type isarray ispointer) #:transparent)
+;型検査用.return文にて、return文がある関数の型と返り値の型の整合性をしらべるためのもの.中身はtype-struct構造体.
+(define now-func-type-struct 'dummy)
+
 ;型検査をする関数 collect-object関数によりobj構造体をうめこまれたあとの抽象構文木をうけとって型検査をする
 ;返り値は#tまたは型のリスト 型違反があれば即時エラーを出力する.
 ;#tはwell-typedを意味する.
 (define (type-check ast)
-  ;オブジェクトの型情報をチェックする.返り値は#tまたは即時エラー
-  
-       
-      
+  ;obj-typeのリストから型情報の構造体に変換する便利関数
+  (define (conv-typelist-to-struct typelist)
+    (let* ((rst (type-struct 'dummy #f #f)))
+      (if (equal? 'array (car typelist))
+         (begin
+           (set! rst (type-struct (type-struct-type rst) #t (type-struct-ispointer rst)))
+           (let ((arraytype (cadr typelist)))
+             (if (list? arraytype)
+                (begin (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (equal? (car arraytype) 'pointer)))
+                      (set! rst (type-struct (cadr arraytype) (type-struct-isarray rst) (type-struct-ispointer rst))))
+                (set! rst (type-struct arraytype (type-struct-isarray rst) (type-struct-ispointer rst)))))
+           (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (type-struct-ispointer rst)))
+           rst)
+        (if (equal? (car typelist) 'pointer)
+             (begin
+               (set! rst (type-struct (cadr typelist) (type-struct-isarray rst) #t))
+               rst)
+             (begin
+               (set! rst (type-struct (car typelist) (type-struct-isarray rst) (type-struct-ispointer rst)))
+               rst)))))
+
+  ;objをうけとり型に問題がないか調べる
+  (define (obj-check tgt-obj)
+    (let* ((tgt-obj-fixed ;obj-kindがfunまたはprotoのときは,typeに引数情報を含んでいるので,carで一番はじめのをとりだす
+            (if (or (equal? 'fun (obj-kind tgt-obj)) (equal? 'proto (obj-kind tgt-obj)))
+               (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))
+                             tgt-obj))
+           (obj-type-struct (conv-typelist-to-struct (obj-type tgt-obj)))
+           (hoge (display obj-type-struct))) ;for debug
+      (if (or (equal? 'var (obj-kind tgt-obj)) (equal? 'parm (obj-kind tgt-obj)))
+         ;パラメータまたは変数のときはvoidはダメ.
+         (if (equal? 'void (type-struct-type obj-type-struct))
+            (error "void型が現れるのは関数の返り値型としてのみです")
+            #t)
+         ;プロトタイプ宣言または関数定義のとき,typeがvoidであればポインタでもなく配列でもなければならない
+         (if (equal? 'void (type-struct-type obj-type-struct))
+            (if (and (equal? #f (type-struct-isarray obj-type-struct))
+                    (equal? #f (type-struct-ispointer obj-type-struct)))
+               #t
+               (error "voidの配列,voidのポインタ型,voidのポインタ型の配列は許可されません!!"))
+            #t))))
+  ;抽象構文木の型検査をする.expression構造体の子になるものに関しては別のtype-check-exp関数を利用する.
+  ;返り値は#tまたは即時エラー
   (define (type-check-main ast)
     (cond
-      ;ここを通過するのはプログラムのrootのみ.つまりstx:declarationとstx:func-prototypeとstx:func-definitionが並んだリストしかここを通らない
+      ;空の文
+      ((null? ast) #t)
+      ;obj
+      ((obj? ast) (obj-check ast))
       ;すべてエラーなく通過した場合すべて#tを返すので返り値は#tになる
-      ((list? ast)
-       (if (= 1 (length ast)) (type-check (car ast)) (and (type-check (car ast) (type-check (cdr ast))))))
+      ((list? ast) (if (= 1 (length ast)) (type-check-main (car ast)) (and (type-check-main (car ast) ) (type-check-main (cdr ast)))))
       ;stx:declaration
-      ((stx:declaration? ast) #t)
+      ;declistの中のobjがすべて正しいか調べる
+      ((stx:declaration? ast) (type-check-main (stx:declaration-declist ast)))
       ;stx:func-prototype
-      ((stx:func-prototype? ast) #t)
-      ;stx:func-definition
-      ;関数本体がwell-typedならwell-typed
-      ((stx:func-definition? ast)
-       (if (equal? #t (type-check (stx:func-definition-statement ast)))
+      ;プロトタイプ宣言自身のobjとパラメータリストがすべて#tならOK
+      ((stx:func-prototype? ast)
+       (if (and
+            (type-check-main (stx:func-prototype-var-decl ast))
+            (type-check-main (stx:func-prototype-declarator ast)))
           #t
           #f))
+      ;stx:func-definition
+      ;関数定義自身のobjとパラメータリストと関数定義の複文本体がすべて#tならOK
+      ((stx:func-definition? ast)
+       (if (and
+            (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
+              (begin
+                (set! now-func-type-struct (conv-typelist-to-struct (obj-type (stx:func-definition-var-decl ast))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
+                rst))
+            (type-check-main (stx:func-definition-declarator ast))
+            (type-check-main (stx:func-definition-statement ast)))
+          #t
+          #f))
+               
       ;stx:compound-stmt
-      ((stx:compound-stmt? ast) `())
+      ((stx:compound-stmt? ast)
+       (if (and
+            (type-check-main (stx:compound-stmt-declaration-list-opt ast))
+            (type-check-main (stx:compound-stmt-statement-list-opt ast)))
+          #t
+          #f))
       ;stx:expression
-      ((stx:expression? ast) `())
-      ;stx:funccall-exp
-      ((stx:funccall-exp? ast) `())
-      ;stx:aop-exp
-      ((stx:aop-exp? ast) `())
-      ;stx:rop-exp
-      ((stx:rop-exp? ast) `())
-      ;stx:assign-stmt
-      ((stx:assign-stmt? ast) `())
+      ;ここにくるのは文としての式のときのみのはず. type-check-expでエラーがでなければOK
+      ((stx:expression? ast) (let ((exp-type (type-check-exp ast))) #t)) 
       ;stx:while-stmt
-      ((stx:while-stmt? ast) `())
+      ((stx:while-stmt? ast)
+       ;まずtestの型がintであるかチェック
+       (if (equal? (type-struct 'int #f #f) (type-check-exp (stx:while-stmt-test ast)))
+          ;testの型がintであればbodyがwell-typedか調べる
+          (if (type-check-main (stx:while-stmt-body (stx:while-stmt-body ast)))
+             #t
+             #f)
+          ;testの型がintでなければエラー
+          (error "while文またはfor文のテストの式の型はintでなければなりません.")))
+                
       ;stx:if-else-stmt
-      ((stx:if-else-stmt? ast) `())
+      ((stx:if-else-stmt? ast)
+       ;まずtestの型がintであるかチェック
+       (if (equal? (type-struct 'int #f #f) (type-check-exp (stx:if-else-stmt-test ast)))
+          ;testの型がintであれば2つのbodyがwell-typedか調べる
+          (if (and
+               (type-check-main (stx:if-else-stmt-tbody ast))
+               (type-check-main (stx:if-else-stmt-ebody ast)))
+             #t
+             #f)
+          ;testの型がintでなければエラー
+          (error "if文のテストの式の型はintでなければなりません.")))
       ;stx:return-stmt
-      ((stx:return-stmt? ast) `())
-      ;stx:logical-and-or-expr
-      ((stx:logical-and-or-expr? ast) `())
-      ;stx;addr-exp
-      ((stx:addr-exp? ast) `())
+      ;現在いる関数の型と一致しなければエラー
+      ((stx:return-stmt? ast)
+       (if (equal? 'void (type-struct-type now-func-type-struct))
+          ;void型のときはnullでなければエラー
+          (if (null? (stx:return-stmt-var ast))
+             #t
+             (error "void型関数内のreturn文はnullでなければなりません"))
+          ;他の型のときは型が一致していればOK
+          (if (equal? now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
+             #t
+             (error "return文の型の整合性がとれていません,"))))
+     
+      (else (error "木の巡回エラー"))))
+
+  ;式の型検査をする関数.返り値はtype-struct構造体を用いる.
+  (define (type-check-exp exp)
+    (cond
+      ;stx:expression
+      ((stx:expression? exp) (type-struct 'int #f #f))
+      ;stx:assign-stmt
+      ((stx:assign-stmt? exp) `())
+      ;stx:funccall-exp
+      ((stx:funccall-exp? exp) `())
+      ;stx:aop-exp
+      ((stx:aop-exp? exp) `())
+      ;stx;rop-exp
+      ((stx:rop-exp? exp) `())
+      ;stx:logical-and-or-exp
+      ((stx:logical-and-or-expr? exp) `())
+      ;stx:addr-exp
+      ((stx:addr-exp? exp) `())
       ;stx:deref-exp
-      ((stx:deref-exp? ast) `())
+      ((stx:deref-exp? exp) `())
       ;stx:lit-exp
-      ((stx:lit-exp? ast) `())
-      (else `())))
+      ((stx:lit-exp? exp) `())
+      (else (error "木の巡回エラー"))))
   (type-check-main ast))
