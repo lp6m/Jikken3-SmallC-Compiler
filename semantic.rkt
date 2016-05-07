@@ -10,8 +10,9 @@
 ;collect-objectで使う環境
 (define obj-env initial-env)
 ;型検査用.関数の名前と型と引数の型をすべてリストで表したものを要素とするリストをつくる
-;collect-object関数で木を巡回しているときに行う.
-(define func-def-list `())
+;collect-object関数で木を巡回しているときに行う. print関数だけもともと追加しておく
+(define initial-func-def-list (list (list 'print (list 'void) (list 'int))))
+(define func-def-list initial-func-def-list)
 ;型検査用.func-def-listからnameが一致するものを取り出す
 (define (search-func-by-name name)
   (define (search-func-by-name-main name tgt-list)
@@ -234,7 +235,7 @@
        ;else
       (else ast)))
   
-  (begin (set! func-def-list `()) (set! obj-env initial-env) (collect-object-main ast 0)))
+  (begin (set! func-def-list (list (list 'print (list 'void) (list 'int)))) (set! obj-env initial-env) (collect-object-main ast 0)))
 
 ;環境のスタックを処理するための関数
 ;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
@@ -391,15 +392,16 @@
     (and (equal? 'int (type-struct-type tgt-struct)) (equal? #t (type-struct-ispointer tgt-struct)) (equal? #t (type-struct-ispointerpointer tgt-struct))))
   ;等しい型かどうか調べる関数 isarrayは関係ない
   (define (isequal-type type1 type2)
-    (and (equal? (type-struct-type type1) (type-struct-type type2)) (equal? (type-struct-ispointer type1 type2)) (equal? (type-struct-ispointer type1 type2))))
+    (and (equal? (type-struct-type type1) (type-struct-type type2)) (equal? (type-struct-ispointer type1) (type-struct-ispointer type2)) (equal? (type-struct-ispointerpointer type1) (type-struct-ispointerpointer type2))))
   ;objをうけとり型に問題がないか調べる
   (define (obj-check tgt-obj)
     (let* ((tgt-obj-fixed ;obj-kindがfunまたはprotoのときは,typeに引数情報を含んでいるので,carで一番はじめのをとりだす
             (if (or (equal? 'fun (obj-kind tgt-obj)) (equal? 'proto (obj-kind tgt-obj)))
                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))
                              tgt-obj))
-           (obj-type-struct (conv-typelist-to-struct (obj-type tgt-obj)))
-           (hoge (display obj-type-struct))) ;for debug
+           (obj-type-struct (conv-typelist-to-struct (obj-type tgt-obj-fixed)))
+           ;(hoge (display obj-type-struct));for debug
+           ) 
       (if (or (equal? 'var (obj-kind tgt-obj-fixed)) (equal? 'parm (obj-kind tgt-obj-fixed)))
          ;パラメータまたは変数のときはvoidはダメ.
          (if (equal? 'void (type-struct-type obj-type-struct))
@@ -461,7 +463,7 @@
        ;まずtestの型がintであるかチェック
        (if (isint (type-check-exp (stx:while-stmt-test ast)))
           ;testの型がintであればbodyがwell-typedか調べる
-          (if (type-check-main (stx:while-stmt-body (stx:while-stmt-body ast)))
+          (if (type-check-main (stx:while-stmt-body ast))
              #t
              #f)
           ;testの型がintでなければエラー
@@ -490,7 +492,7 @@
           ;他の型のときは型が一致していればOK
           (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
              #t
-             (error "return文の型の整合性がとれていません,"))))
+             (begin (display now-func-type-struct) (display (type-check-exp (stx:return-stmt-var ast))) (error "return文の型の整合性がとれていません,")))))
      
       (else (begin (display ast) (error "stmt 木の巡回エラー")))))
 
@@ -515,7 +517,7 @@
       ((stx:funccall-exp? exp)
        (let ((search-rst (search-func-by-name (stx:funccall-exp-tgt exp))))
          (if (equal? #f search-rst)
-            (error "error: funccall-exp: call undefined function")
+            (begin (display  (stx:funccall-exp-tgt exp)) (error "error: funccall-exp: call undefined function"))
             (let ((funccall-exptypelist  ;関数呼び出しで使用されている式の型リスト
                    (if (null? (stx:funccall-exp-paramlist exp))
                       `()
@@ -540,8 +542,8 @@
       ;stx:aop-exp
       ((stx:aop-exp? exp)
        (let
-           ((left-type (type-check (stx:aop-exp-left exp)))
-            (right-type (type-check (stx:aop-exp-right exp))))
+           ((left-type (type-check-exp (stx:aop-exp-left exp)))
+            (right-type (type-check-exp (stx:aop-exp-right exp))))
          (cond
           ;+演算
            ((equal? '+ (stx:aop-exp-op exp))
@@ -582,27 +584,27 @@
            (else (error "unknown operand")))))
       ;stx;rop-exp
       ((stx:rop-exp? exp)
-       (if (isequal-type (type-check (stx:rop-exp-left exp)) (type-check (stx:rop-exp-right exp)))
+       (if (isequal-type (type-check-exp (stx:rop-exp-left exp)) (type-check-exp (stx:rop-exp-right exp)))
           (type-struct 'int #f #f #f)
           (error "比較演算の左辺と右辺には同じ型がこないといけない!")))
       ;stx:logical-and-or-exp
       ((stx:logical-and-or-expr? exp)
-       (if (and (isint (type-check (stx:logical-and-or-expr-log1 exp))) (isint (type-check (stx:logical-and-or-expr-log2 exp))))
+       (if (and (isint (type-check-exp (stx:logical-and-or-expr-log1 exp))) (isint (type-check-exp (stx:logical-and-or-expr-log2 exp))))
           (type-struct 'int #f #f #f)
           (error "&&または||の右辺と左辺にはint型のみOK")))
       ;stx:addr-exp &
       ((stx:addr-exp? exp)
-       (if (isint (type-check exp))
+       (if (isint (type-check-exp exp))
           (type-struct 'int #f #t #f)
           (error "addr-exp &の後ろはint型のみOK")))
       ;stx:deref-exp *
       ((stx:deref-exp? exp)
        ;*e eがint*ならintつける
        (cond
-         ((isint-pointer (type-check (stx:deref-exp-arg exp)))
+         ((isint-pointer (type-check-exp (stx:deref-exp-arg exp)))
           (type-struct 'int #f #f #f))
          ;*e eがint**ならint*つける
-         ((isint-pointerpointer (type-check (stx:deref-exp-arg exp)))
+         ((isint-pointerpointer (type-check-exp (stx:deref-exp-arg exp)))
           (type-struct 'int #f #t #f))
        (else (error "deref-expで型違反"))))
       ;stx:lit-exp
