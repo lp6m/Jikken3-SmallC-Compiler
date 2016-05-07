@@ -441,7 +441,10 @@
        (if (and
             (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
               (begin
-                (set! now-func-type-struct (conv-typelist-to-struct (obj-type (stx:func-definition-var-decl ast))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
+                (set! now-func-type-struct
+                     (conv-typelist-to-struct
+                      (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
+                                       (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
                 rst))
             (type-check-main (stx:func-definition-declarator ast))
             (type-check-main (stx:func-definition-statement ast)))
@@ -531,6 +534,9 @@
                  ;引数の型が全て等しいかしらべる
                  (if (let ((isok #t))
                        (begin
+                         (display (stx:funccall-exp-tgt exp))
+                         (display (cddr search-rst))
+                         (display funccall-exptypelist)
                          (map (lambda (x y) (set! isok (and isok (isequal-type x y)))) funccall-exptypelist funcdef-exptypelist)
                          isok))
                   ;関数呼び出しでの引数の型と関数定義された引数の型が全て等しいのでOK.かえす型は関数自体の型.search-rstの2個目の要素
