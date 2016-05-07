@@ -9,6 +9,19 @@
 (define initial-env (list (lambda (x) #f)))
 ;collect-objectで使う環境
 (define obj-env initial-env)
+;型検査用.関数の名前と型と引数の型をすべてリストで表したものを要素とするリストをつくる
+;collect-object関数で木を巡回しているときに行う.
+(define func-def-list `())
+;型検査用.func-def-listからnameが一致するものを取り出す
+(define (search-func-by-name name)
+  (define (search-func-by-name-main name tgt-list)
+    (if (null? tgt-list)
+       #f
+       (if (equal? (caar tgt-list) name)
+          (car tgt-list)
+          (search-func-by-name-main name (cdr tgt-list)))))
+  (search-func-by-name-main name func-def-list))
+  
 
 ;parser.rkt内のparse-fileやparse-string関数で返る抽象構文木を受け取り,
 ;オブジェクト情報を収集して,2重宣言があれば即時エラーを吐く.
@@ -90,8 +103,14 @@
          (func-def-rst
           (stx:func-definition
            (let* ((rst (add-ref-env  obj-env def-obj)))       　;関数定義のobjを環境に追加した結果をrstに入れる
-             (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
-             (car rst))                                                         ;(car rst)が関数定義のobj
+             (begin
+               (set! obj-env (cdr rst))　　　　　　　　　　               ;環境を更新
+               (set! func-def-list                                           ;型検査で使うfunc-def-listを更新
+                    (append
+                     (list (append
+                            (list (obj-name (car rst)))
+                            (obj-type (car rst)))) func-def-list))
+             (car rst)))                                                         ;(car rst)が関数定義のobj
            
            (begin                                                               ;関数定義のパラメータのobjリスト
              (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
@@ -215,7 +234,7 @@
        ;else
       (else ast)))
   
-  (begin (set! obj-env initial-env) (collect-object-main ast 0)))
+  (begin (set! func-def-list `()) (set! obj-env initial-env) (collect-object-main ast 0)))
 
 ;環境のスタックを処理するための関数
 ;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
@@ -332,7 +351,7 @@
   (cdr env))
 
 ;型検査用.型情報を扱う構造体 こっちのほうが扱いやすい
-(struct type-struct (type isarray ispointer) #:transparent)
+(struct type-struct (type isarray ispointer ispointerpointer) #:transparent)
 ;型検査用.return文にて、return文がある関数の型と返り値の型の整合性をしらべるためのもの.中身はtype-struct構造体.
 (define now-func-type-struct 'dummy)
 
@@ -342,25 +361,37 @@
 (define (type-check ast)
   ;obj-typeのリストから型情報の構造体に変換する便利関数
   (define (conv-typelist-to-struct typelist)
-    (let* ((rst (type-struct 'dummy #f #f)))
+    (let* ((rst (type-struct 'dummy #f #f #f)))
       (if (equal? 'array (car typelist))
          (begin
-           (set! rst (type-struct (type-struct-type rst) #t (type-struct-ispointer rst)))
+           (set! rst (type-struct (type-struct-type rst) #t (type-struct-ispointer rst) (type-struct-ispointerpointer rst)))
            (let ((arraytype (cadr typelist)))
              (if (list? arraytype)
-                (begin (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (equal? (car arraytype) 'pointer)))
-                      (set! rst (type-struct (cadr arraytype) (type-struct-isarray rst) (type-struct-ispointer rst))))
-                (set! rst (type-struct arraytype (type-struct-isarray rst) (type-struct-ispointer rst)))))
-           (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (type-struct-ispointer rst)))
-           rst)
+                (begin (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (equal? (car arraytype) 'pointer) (type-struct-ispointerpointer rst)))
+                      (set! rst (type-struct (cadr arraytype) (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst))))
+                (set! rst (type-struct arraytype (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst))))
+           (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst)))
+           rst))
         (if (equal? (car typelist) 'pointer)
              (begin
-               (set! rst (type-struct (cadr typelist) (type-struct-isarray rst) #t))
+               (set! rst (type-struct (cadr typelist) (type-struct-isarray rst) #t (type-struct-ispointerpointer rst)))
                rst)
              (begin
-               (set! rst (type-struct (car typelist) (type-struct-isarray rst) (type-struct-ispointer rst)))
+               (set! rst (type-struct (car typelist) (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst)))
                rst)))))
-
+  
+  ;int型かどうかチェックする関数 isarrayは関係ない
+  (define (isint tgt-struct)
+    (and (equal? 'int (type-struct-type tgt-struct)) (equal? #f (type-struct-ispointer tgt-struct)) (equal? #f (type-struct-ispointerpointer tgt-struct))))
+  ;int*型かどうかチェックする関数 isarrayは関係ない
+  (define (isint-pointer tgt-struct)
+    (and (equal? 'int (type-struct-type tgt-struct)) (equal? #t (type-struct-ispointer tgt-struct)) (equal? #f (type-struct-ispointerpointer tgt-struct))))
+  ;int**型かどうかチェックする関数 isarrayは関係ない
+  (define (isint-pointerpointer tgt-struct)
+    (and (equal? 'int (type-struct-type tgt-struct)) (equal? #t (type-struct-ispointer tgt-struct)) (equal? #t (type-struct-ispointerpointer tgt-struct))))
+  ;等しい型かどうか調べる関数 isarrayは関係ない
+  (define (isequal-type type1 type2)
+    (and (equal? (type-struct-type type1) (type-struct-type type2)) (equal? (type-struct-ispointer type1 type2)) (equal? (type-struct-ispointer type1 type2))))
   ;objをうけとり型に問題がないか調べる
   (define (obj-check tgt-obj)
     (let* ((tgt-obj-fixed ;obj-kindがfunまたはprotoのときは,typeに引数情報を含んでいるので,carで一番はじめのをとりだす
@@ -369,7 +400,7 @@
                              tgt-obj))
            (obj-type-struct (conv-typelist-to-struct (obj-type tgt-obj)))
            (hoge (display obj-type-struct))) ;for debug
-      (if (or (equal? 'var (obj-kind tgt-obj)) (equal? 'parm (obj-kind tgt-obj)))
+      (if (or (equal? 'var (obj-kind tgt-obj-fixed)) (equal? 'parm (obj-kind tgt-obj-fixed)))
          ;パラメータまたは変数のときはvoidはダメ.
          (if (equal? 'void (type-struct-type obj-type-struct))
             (error "void型が現れるのは関数の返り値型としてのみです")
@@ -428,7 +459,7 @@
       ;stx:while-stmt
       ((stx:while-stmt? ast)
        ;まずtestの型がintであるかチェック
-       (if (equal? (type-struct 'int #f #f) (type-check-exp (stx:while-stmt-test ast)))
+       (if (isint (type-check-exp (stx:while-stmt-test ast)))
           ;testの型がintであればbodyがwell-typedか調べる
           (if (type-check-main (stx:while-stmt-body (stx:while-stmt-body ast)))
              #t
@@ -439,7 +470,7 @@
       ;stx:if-else-stmt
       ((stx:if-else-stmt? ast)
        ;まずtestの型がintであるかチェック
-       (if (equal? (type-struct 'int #f #f) (type-check-exp (stx:if-else-stmt-test ast)))
+       (if (isint (type-check-exp (stx:if-else-stmt-test ast)))
           ;testの型がintであれば2つのbodyがwell-typedか調べる
           (if (and
                (type-check-main (stx:if-else-stmt-tbody ast))
@@ -457,32 +488,135 @@
              #t
              (error "void型関数内のreturn文はnullでなければなりません"))
           ;他の型のときは型が一致していればOK
-          (if (equal? now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
+          (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
              #t
              (error "return文の型の整合性がとれていません,"))))
      
-      (else (error "木の巡回エラー"))))
+      (else (begin (display ast) (error "stmt 木の巡回エラー")))))
 
   ;式の型検査をする関数.返り値はtype-struct構造体を用いる.
   (define (type-check-exp exp)
     (cond
       ;stx:expression
-      ((stx:expression? exp) (type-struct 'int #f #f))
+      ;explistの式を順番に評価していき,最後の式の型をかえす. e1,e2..enの型はenの型と同じ
+      ((stx:expression? exp)
+       (let ((exp-type-list (map (lambda (x) (type-check-exp x)) (stx:expression-explist exp))))
+         (car (reverse exp-type-list))))
       ;stx:assign-stmt
-      ((stx:assign-stmt? exp) `())
+      ;左辺と右辺に同じ型があればそれらと同じ型がつく
+      ((stx:assign-stmt? exp)
+       (let ((left-type (type-check-exp (stx:assign-stmt-var exp)))
+             (right-type (type-check-exp (stx:assign-stmt-src exp))))
+         (if (isequal-type left-type right-type)
+            left-type
+            (error "代入式の左辺と右辺は同じ型である必要があります"))))
       ;stx:funccall-exp
-      ((stx:funccall-exp? exp) `())
+      ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
+      ((stx:funccall-exp? exp)
+       (let ((search-rst (search-func-by-name (stx:funccall-exp-tgt exp))))
+         (if (equal? #f search-rst)
+            (error "error: funccall-exp: call undefined function")
+            (let ((funccall-exptypelist  ;関数呼び出しで使用されている式の型リスト
+                   (if (null? (stx:funccall-exp-paramlist exp))
+                      `()
+                      (map (lambda (x) (type-check-exp x)) (stx:funccall-exp-paramlist exp))))
+                  (funcdef-exptypelist    ;関数定義で定められている式の型リスト
+                   (if (equal? 2 (length search-rst))
+                      `()                         ;nameと関数本体の型しかsearch-rstにない,つまり引数が0個のときはnullリスト
+                      (map (lambda (x) (conv-typelist-to-struct x)) (cddr search-rst)))))
+              ;引数の個数が一致しているかしらべる
+              (if (equal? (length funccall-exptypelist) (length funcdef-exptypelist))
+                 ;引数の型が全て等しいかしらべる
+                 (if (let ((isok #t))
+                       (begin
+                         (map (lambda (x y) (set! isok (and isok (isequal-type x y)))) funccall-exptypelist funcdef-exptypelist)
+                         isok))
+                  ;関数呼び出しでの引数の型と関数定義された引数の型が全て等しいのでOK.かえす型は関数自体の型.search-rstの2個目の要素
+                    (cadr search-rst)
+                    ;エラー
+                    (error "関数呼び出しにおいて定義された引数の型と実際に呼び出しに使われた引数の型が一致しない"))
+                 ;引数の個数が一致しなかった
+                 (error "関数呼び出しにおいて定義された引数の個数と実際に呼び出しに使われた引数の個数が一致しない"))))))
       ;stx:aop-exp
-      ((stx:aop-exp? exp) `())
+      ((stx:aop-exp? exp)
+       (let
+           ((left-type (type-check (stx:aop-exp-left exp)))
+            (right-type (type-check (stx:aop-exp-right exp))))
+         (cond
+          ;+演算
+           ((equal? '+ (stx:aop-exp-op exp))
+            (cond
+              ;int + int
+              ((and (isint left-type) (isint right-type)) (type-struct 'int #f #f #f))
+              ;int* + int または int + int*
+              ((or (and (isint-pointer left-type) (isint right-type))
+                  (and (isint-pointer right-type) (isint left-type)))
+               (type-struct 'int #f #t #f))
+              ;int** + int または int + int**
+              ((or (and (isint-pointerpointer left-type) (isint right-type))
+                  (and (isint-pointerpointer right-type) (isint left-type)))
+               (type-struct 'int #f #f #f))
+              ;エラー
+              (else (error "+演算において型違反"))))
+           ;-演算
+           ((equal? '- (stx:aop-exp-op exp))
+            (cond
+              ;int - int
+              ((and (isint left-type) (isint right-type)) (type-struct 'int #f #f #f))
+              ;int* - int
+              ((and (isint-pointer left-type) (isint right-type)) (type-struct 'int #f #t #f))
+              ;int** - int
+              ((and (isint-pointerpointer left-type) (isint right-type)) (type-struct 'int #f #t #t))
+              ;エラー
+              (else (error "-演算において型違反"))))
+           ;*演算
+           ((equal? '* (stx:aop-exp-op exp))
+            (if (and (isint left-type) (isint right-type))
+               (type-struct 'int #f #f #f)
+               (error "*演算において型違反")))
+           ;/演算
+           ((equal? '/ (stx:aop-exp-op exp))
+            (if (and (isint left-type) (isint right-type))
+               (type-struct 'int #f #f #f)
+               (error "/演算において型違反")))
+           (else (error "unknown operand")))))
       ;stx;rop-exp
-      ((stx:rop-exp? exp) `())
+      ((stx:rop-exp? exp)
+       (if (isequal-type (type-check (stx:rop-exp-left exp)) (type-check (stx:rop-exp-right exp)))
+          (type-struct 'int #f #f #f)
+          (error "比較演算の左辺と右辺には同じ型がこないといけない!")))
       ;stx:logical-and-or-exp
-      ((stx:logical-and-or-expr? exp) `())
-      ;stx:addr-exp
-      ((stx:addr-exp? exp) `())
-      ;stx:deref-exp
-      ((stx:deref-exp? exp) `())
+      ((stx:logical-and-or-expr? exp)
+       (if (and (isint (type-check (stx:logical-and-or-expr-log1 exp))) (isint (type-check (stx:logical-and-or-expr-log2 exp))))
+          (type-struct 'int #f #f #f)
+          (error "&&または||の右辺と左辺にはint型のみOK")))
+      ;stx:addr-exp &
+      ((stx:addr-exp? exp)
+       (if (isint (type-check exp))
+          (type-struct 'int #f #t #f)
+          (error "addr-exp &の後ろはint型のみOK")))
+      ;stx:deref-exp *
+      ((stx:deref-exp? exp)
+       ;*e eがint*ならintつける
+       (cond
+         ((isint-pointer (type-check (stx:deref-exp-arg exp)))
+          (type-struct 'int #f #f #f))
+         ;*e eがint**ならint*つける
+         ((isint-pointerpointer (type-check (stx:deref-exp-arg exp)))
+          (type-struct 'int #f #t #f))
+       (else (error "deref-expで型違反"))))
       ;stx:lit-exp
-      ((stx:lit-exp? exp) `())
-      (else (error "木の巡回エラー"))))
+      ((stx:lit-exp? exp) (type-struct 'int #f #f #f))
+      ;obj
+      ((obj? exp)
+       (let ((conv-rst (conv-typelist-to-struct (obj-type exp))))
+       (if (equal? #t (type-struct-isarray conv-rst))
+          ;変数参照式なので intならint*に, int*ならint**にする
+          (cond
+            ((isint conv-rst) (type-struct 'int #t #t #f))
+            ((isint-pointer conv-rst) (type-struct 'int #t #t #t))
+            (else "変数参照で配列、要素がintかint*以外になっている"))
+          ;そのままかえす
+          conv-rst)))
+      (else (begin (display exp) (error "exp 木の巡回エラー")))))
   (type-check-main ast))
