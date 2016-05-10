@@ -520,7 +520,7 @@
       ((stx:funccall-exp? exp)
        (let ((search-rst (search-func-by-name (stx:funccall-exp-tgt exp))))
          (if (equal? #f search-rst)
-            (begin (display  (stx:funccall-exp-tgt exp)) (error "error: funccall-exp: call undefined function"))
+            (begin  (error "error: funccall-exp: call undefined function"))
             (let ((funccall-exptypelist  ;関数呼び出しで使用されている式の型リスト
                    (if (null? (stx:funccall-exp-paramlist exp))
                       `()
@@ -534,13 +534,10 @@
                  ;引数の型が全て等しいかしらべる
                  (if (let ((isok #t))
                        (begin
-                         (display (stx:funccall-exp-tgt exp))
-                         (display (cddr search-rst))
-                         (display funccall-exptypelist)
                          (map (lambda (x y) (set! isok (and isok (isequal-type x y)))) funccall-exptypelist funcdef-exptypelist)
                          isok))
                   ;関数呼び出しでの引数の型と関数定義された引数の型が全て等しいのでOK.かえす型は関数自体の型.search-rstの2個目の要素
-                    (cadr search-rst)
+                    (conv-typelist-to-struct (cadr search-rst))
                     ;エラー
                     (error "関数呼び出しにおいて定義された引数の型と実際に呼び出しに使われた引数の型が一致しない"))
                  ;引数の個数が一致しなかった
