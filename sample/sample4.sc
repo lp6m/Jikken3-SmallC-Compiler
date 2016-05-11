@@ -1,26 +1,22 @@
-int a, *b, c[10];
-int d, *e[2];
-
-int func(int a,int *b);
-int *func2(int a);
-void func3();
-
-int *funcdef1(int a,int *b){
-	return 4;
+void swap(int *a,int *b){
+	int c;
+	c = *a;
+	*a = *b;
+	*b = c;
 }
 
-void funcdef2(){
-	
-}
 int main(){
-	for(i;i<4;i=i+1){
-		a = &b;
-		c = (d = 6) + 7;
-		f = 14 * (2 +  7), g = *f + t[0];
-
+	int a[10],b[10],i;
+	for(i = 0; i < 10; i = i + 1){
+		a[i] = i;
+		b[i] = 10 - i;
 	}
-	if(a == b && (c == *d || e != f)){
-		print(1);
+	for(i = 0; i < 10; i = i + 1){
+		swap(&a[i],&b[i]);
 	}
-	return ((a[0]+4)*5);
+	i = 0;
+	while(a[i] < 5){
+		print(a[i]);
+		i = i + 1;
+	}
 }

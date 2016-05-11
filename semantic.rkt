@@ -1,4 +1,4 @@
- #lang racket
+#lang racket
 (require (prefix-in parser: "parser.rkt")
          (prefix-in stx:    "syntax.rkt"))
 ;オブジェクト情報をもつ構造体
