@@ -1,6 +1,6 @@
 #lang racket
 (require (prefix-in parser: "parser.rkt")
-         (prefix-in stx:    "syntax.rkt"))
+         (prefix-in stx:    "parser-syntax.rkt"))
 ;オブジェクト情報をもつ構造体
 (struct obj (name lev kind type) #:transparent)
 ;kind = var parm fun proto 
@@ -626,4 +626,13 @@
           ;そのままかえす
           conv-rst)))
       (else (begin (display exp) (error "exp 木の巡回エラー")))))
-  (type-check-main ast))
+  
+  (display (type-check-main ast)))
+
+;意味解析のメイン関数 抽象構文木をうけとり,オブジェクト情報の収集をしてオブジェクト情報を埋め込んだ抽象構文木をかえす。.
+;同時に,二重定義や未定義変数,関数の使用してないかのチェックと型検査を行う.
+(define (semantic-analysis ast)
+  (let ((object-collected-ast (collect-object ast)))
+    (begin
+      (type-check object-collected-ast)
+      object-collected-ast)))

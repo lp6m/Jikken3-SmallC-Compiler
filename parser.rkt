@@ -3,7 +3,7 @@
 (require parser-tools/lex
          (prefix-in : parser-tools/lex-sre)
          parser-tools/yacc
-         (prefix-in stx: "syntax.rkt")
+         (prefix-in stx: "parser-syntax.rkt")
          )
 (define ... (void)) ;; indicates a part to be implemented
 
