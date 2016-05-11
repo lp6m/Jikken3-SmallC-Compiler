@@ -587,9 +587,11 @@
            (else (error "unknown operand")))))
       ;stx;rop-exp
       ((stx:rop-exp? exp)
-       (if (isequal-type (type-check-exp (stx:rop-exp-left exp)) (type-check-exp (stx:rop-exp-right exp)))
+       (let ((left-type (type-check-exp (stx:rop-exp-left exp)))
+             (right-type (type-check-exp (stx:rop-exp-right exp))))
+       (if (isequal-type left-type right-type)
           (type-struct 'int #f #f #f)
-          (error "比較演算の左辺と右辺には同じ型がこないといけない!")))
+          (begin (display left-type) (display right-type) (error "比較演算の左辺と右辺には同じ型がこないといけない!")))))
       ;stx:logical-and-or-exp
       ((stx:logical-and-or-expr? exp)
        (if (and (isint (type-check-exp (stx:logical-and-or-expr-log1 exp))) (isint (type-check-exp (stx:logical-and-or-expr-log2 exp))))
@@ -597,7 +599,7 @@
           (error "&&または||の右辺と左辺にはint型のみOK")))
       ;stx:addr-exp &
       ((stx:addr-exp? exp)
-       (if (isint (type-check-exp exp))
+       (if (isint (type-check-exp (stx:addr-exp-var exp)))
           (type-struct 'int #f #t #f)
           (error "addr-exp &の後ろはint型のみOK")))
       ;stx:deref-exp *

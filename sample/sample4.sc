@@ -7,6 +7,7 @@ void swap(int *a,int *b){
 
 int main(){
 	int a[10],b[10],i;
+	int *c;
 	for(i = 0; i < 10; i = i + 1){
 		a[i] = i;
 		b[i] = 10 - i;
@@ -15,8 +16,9 @@ int main(){
 		swap(&a[i],&b[i]);
 	}
 	i = 0;
-	while(a[i] < 5){
-		print(a[i]);
-		i = i + 1;
+	for(i = 0; i < 10; i = i + 1){
+		if(a[i] == b[i] && (&a[i] == &b[i] || a == c)){
+			print(a[i]);
+		}
 	}
 }
