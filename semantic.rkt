@@ -235,7 +235,13 @@
        ;else
       (else ast)))
   
-  (begin (set! func-def-list (list (list 'print (list 'void) (list 'int)))) (set! obj-env initial-env) (collect-object-main ast 0)))
+  ;ここから開始
+  (begin
+    ;暗黙のprint関数のプロトタイプ宣言を追加.
+    (let ((print-proto-added-ast (append `(,(stx:func-prototype (stx:var-decl 'void 'print #f #f `()) (list (stx:var-decl 'int 'n #f #f `())) `())) ast)))
+      (set! func-def-list initial-func-def-list)
+      (set! obj-env initial-env)
+      (collect-object-main print-proto-added-ast 0))))
 
 ;環境のスタックを処理するための関数
 ;環境の実装方法は、レベル1つにつき1つのlambda式を作り、そのlambda式のリストが環境である。
@@ -322,8 +328,26 @@
         ;新しいobjが関数定義のとき
         ((equal? (obj-kind newobj) 'fun)
          (if search-rst
-            ;既にnameが一致するオブジェクトが存在するとき→エラー
-            (error "関数の二重定義はエラー")
+            ;既にnameが一致するオブジェクトが存在するとき
+            (cond
+              ((equal? (obj-kind search-rst) 'var)
+               (error "既に変数として宣言されている"))
+              ((equal? (obj-kind search-rst) 'parm)
+               (error "パラメータとして既に宣言されている"));たぶんここにはこない
+              ((equal? (obj-kind search-rst) 'fun)
+               (error "関数の二重定義はエラー"))
+              ((equal? (obj-kind search-rst)  'proto)
+               ;型情報が一致しているかどうかチェック
+               (if (equal? (obj-type newobj) (obj-type search-rst))
+                  ;登録
+                  (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+                    (if (null? (cdr env))
+                       (cons newobj `(,top-env))
+                       (cons newobj `(,top-env ,@(cdr env)))))
+                  ;エラー
+                  (error "プロトタイプ宣言と関数定義で型が違う")))
+              (else (error "unknown obj-kind")))
+            
             ;既にnameが一致するオブジェクトが存在しないとき→登録
             (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
               (if (null? (cdr env))
