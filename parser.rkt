@@ -275,7 +275,7 @@
                  (remove-syntax-sugar (stx:deref-exp-arg (car (stx:expression-explist x))))
                  (stx:addr-exp x (stx:addr-exp-pos tree)))))
         ((stx:array-exp? tree) 
-         (stx:deref-exp 
+         (stx:addr-exp 
           (stx:aop-exp '+ (remove-syntax-sugar (stx:array-exp-tgt tree)) (remove-syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))
         
         ((stx:lit-exp? tree) (stx:lit-exp (remove-syntax-sugar (stx:lit-exp-val tree)) (stx:lit-exp-pos tree)))
