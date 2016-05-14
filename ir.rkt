@@ -168,15 +168,29 @@
           ,(ir-stx:assign-stmt dest (ir-stx:rop-exp (stx:rop-exp-op exp) t0 t1)))))))
    
     ((stx:lit-exp? exp) `(,(ir-stx:assign-stmt dest (ir-stx:lit-exp (stx:lit-exp-val exp)))))
-    ((semantic:obj? exp) `(,(ir-stx:assign-stmt dest exp)))
+    ((semantic:obj? exp) `(,(ir-stx:assign-stmt dest (ir-stx:var-exp exp))))
     ((stx:assign-stmt? exp)
-     (let ((t0 (fresh-tmpvar)))
-       `(,(ir-stx:cmpd-stmt
-           ;cmpd-stmt-decls
-           (list (ir-stx:var-decl t0))
-           ;cmpd-stmt-stmts
-           `(,@(exp->ir t0 (stx:assign-stmt-src exp))
-             ,(ir-stx:assign-stmt (stx:assign-stmt-var exp) t0))))))
+     ;assign-stmtの左辺がobjの場合exp->irすると a = 3; の左辺aがexp->irされて変数参照かと思われて tmp = aみたいになって希望通りの動作をしない
+     (if (semantic:obj? (stx:assign-stmt-var exp))
+         ;assign-stmtの左辺がobjなら左辺はexp->irしない
+         (let ((t0 (fresh-tmpvar)))
+           `(,(ir-stx:cmpd-stmt
+               ;cmpd-stmt-decls
+               (list (ir-stx:var-decl t0))
+               ;cmpd-stmt-stmts
+               `(,@(exp->ir t0 (stx:assign-stmt-src exp))
+                 ,(ir-stx:assign-stmt (stx:assign-stmt-var exp) (ir-stx:var-exp t0))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0))))))
+         ;assign-stmtの左辺がobjでない(例えば a[2] = 3 => *(a + 2) = 3のとき)
+         (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
+           `(,(ir-stx:cmpd-stmt
+               ;cmpd-stmt-decls
+               (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
+               ;cmpd-stmt-stmts
+               `(,@(exp->ir t0 (stx:assign-stmt-var exp))　;a *(a+2)
+                 ,@(exp->ir t1 (stx:assign-stmt-src exp))
+                 ,(ir-stx:assign-stmt t0 (ir-stx:var-exp t1))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1))))))))
     ((stx:deref-exp? exp)
      (let ((t0 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
@@ -238,6 +252,112 @@
            (else (error "unknown logical op"))))
     (else (error "kinojunkai"))))
 
+;中間表現見やすく表示する関数
+;cmpd-stmtのカッコや,var-declの宣言はすべて表示しない
+(define (ir-simple-display ir)
+  (cond
+    ((list? ir) (for-each (lambda (x) (ir-simple-display x)) ir))
+    ((ir-stx:var-decl? ir) (display ""))
+    ((ir-stx:fun-def? ir)
+     (begin
+       (display "fun-def: ")
+       (display (semantic:obj-name (ir-stx:fun-def-var ir)))
+       (display " ")
+       (display (semantic:obj-type (ir-stx:fun-def-var ir)))
+       (display "(")
+       (for-each (lambda (x) (begin (display (semantic:obj-name (ir-stx:var-decl-var x))) (display " ") (display (semantic:obj-type (ir-stx:var-decl-var x))) (display " "))) (ir-stx:fun-def-parms ir))
+       (display ")")
+       (newline)
+       (for-each (lambda (x) (ir-simple-display x)) (ir-stx:fun-def-body ir)) 
+       (newline)))
+    ((ir-stx:assign-stmt? ir)
+     (begin
+       (display (semantic:obj-name (ir-stx:assign-stmt-var ir)))
+       (display " = ")
+       (ir-simple-display (ir-stx:assign-stmt-exp ir))
+       (newline)))
+    ((ir-stx:write-stmt? ir)
+     (begin
+       (display "*")
+       (display (semantic:obj-name (ir-stx:write-stmt-dest ir)))
+       (display " = ")
+       (display (semantic:obj-name (ir-stx:write-stmt-src ir)))
+       (newline)))
+    ((ir-stx:read-stmt? ir)
+     (begin
+       (display (semantic:obj-name (ir-stx:read-stmt-dest ir)))
+       (display " = *")
+       (display (semantic:obj-name (ir-stx:read-stmt-src ir)))
+       (newline)))
+    ((ir-stx:label-stmt? ir)
+     (begin
+       (display "label:")
+       (display (ir-stx:label-stmt-name ir))
+       (newline)))
+    ((ir-stx:if-stmt? ir)
+     (begin
+       (display "if ")
+       (display (semantic:obj-name (ir-stx:if-stmt-var ir)))
+       (display " then goto ")
+       (display (ir-stx:label-stmt-name (ir-stx:if-stmt-tlabel ir)))
+       (display " else goto ")
+       (display (ir-stx:label-stmt-name (ir-stx:if-stmt-elabel ir)))
+       (newline)))
+    ((ir-stx:goto-stmt? ir)
+     (begin
+       (display "goto ")
+       (display (ir-stx:label-stmt-name (ir-stx:goto-stmt-label ir)))
+       (newline)))
+    ((ir-stx:call-stmt? ir)
+     (begin
+       (display (semantic:obj-name (ir-stx:call-stmt-dest ir)))
+       (display " = ")
+       (display (ir-stx:call-stmt-tgt ir))
+       (display "(")
+       (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display " "))) (ir-stx:call-stmt-vars ir))
+       (display ")")
+       (newline)))
+    ((ir-stx:ret-stmt? ir)
+     (begin
+       (display "return ")
+       (display (semantic:obj-name (ir-stx:ret-stmt-var ir)))
+       (newline)))
+    ((ir-stx:print-stmt? ir)
+     (begin
+       (display "print(")
+       (display (semantic:obj-name (ir-stx:print-stmt-var ir)))
+       (display ")")
+       (newline)))
+    ((ir-stx:cmpd-stmt? ir)
+     (for-each (lambda (x) (ir-simple-display x)) (ir-stx:cmpd-stmt-stmts ir)))
+    ((ir-stx:var-exp? ir)
+     (display (semantic:obj-name (ir-stx:var-exp-var ir))))
+    ((ir-stx:lit-exp? ir)
+     (display (ir-stx:lit-exp-val ir)))
+    ((ir-stx:aop-exp? ir)
+     (begin
+       (display "(")
+       (ir-simple-display (ir-stx:aop-exp-left ir))
+       (display " ")
+       (display (ir-stx:aop-exp-op ir))
+       (display " ")
+       (ir-simple-display (ir-stx:aop-exp-right ir))
+       (display ")")))
+    ((ir-stx:rop-exp? ir)
+     (begin
+       (display "(")
+       (ir-simple-display (ir-stx:rop-exp-left ir))
+       (display " ")
+       (display (ir-stx:rop-exp-op ir))
+       (display " ")
+       (ir-simple-display (ir-stx:rop-exp-right ir))
+       (display ")")))
+    ((ir-stx:addr-exp? ir)
+     (begin
+       (display "&")
+       (display (semantic:obj-name (ir-stx:addr-exp-var ir)))))
+    ((semantic:obj? ir)
+     (display (semantic:obj-name ir)))))
 ;parse-fileしてsemantic-analysisして中間表現にする関数
 (define (ir-main filename)
   (begin

@@ -5,7 +5,6 @@
 (struct var-decl (var) #:transparent)
 ; 関数定義
 (struct fun-def (var parms body) #:transparent) ; parms は var-decl のリスト
- 
 ; ; 文
 ; 変数への代入: <var> = <exp>;
 (struct assign-stmt (var exp) #:transparent)
