@@ -1,4 +1,5 @@
 #lang racket
+(provide (all-defined-out))
 (require (prefix-in parser: "parser.rkt")
          (prefix-in stx:    "parser-syntax.rkt"))
 ;オブジェクト情報をもつ構造体

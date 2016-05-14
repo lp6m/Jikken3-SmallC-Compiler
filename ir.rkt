@@ -92,7 +92,7 @@
          ;void型のときはvarはnull
          `(,(ir-stx:ret-stmt `()))
          ;int型のとき
-         (let ((return-var ((fresh-tmpvar))))
+         (let ((return-var (fresh-tmpvar)))
            `(,(ir-stx:cmpd-stmt
                ;cmpd-stmt-decls
                (list (ir-stx:var-decl return-var))
@@ -100,7 +100,13 @@
                `(,@(exp->ir return-var (stx:return-stmt-var ast))
                  ,(ir-stx:ret-stmt return-var)))))))
     
-    ((stx:expression? ast) (exp->ir `() ast))
+    ((stx:expression? ast)
+     (let ((t0 (fresh-tmpvar)))
+       `(,(ir-stx:cmpd-stmt
+           ;cmpd-stmt-decls
+           (list (ir-stx:var-decl t0))
+           ;cmpd-stmt-stmts
+           (exp->ir t0 ast)))))
               
     (else `())))
 
@@ -124,15 +130,33 @@
                        (exp->ir t0 x))))
                   (reverse (cdr (reverse (stx:expression-explist exp))))) ;最後以外
            ,@(exp->ir dest (car (reverse (stx:expression-explist exp))))))))
+    ((stx:funccall-exp? exp)
+     (if (equal? 'print (stx:funccall-exp-tgt exp))
+         ;print文
+         (let ((t0 (fresh-tmpvar)))
+           `(,(ir-stx:cmpd-stmt
+             ;cmpd-stmt-decls
+             (list t0)
+             ;cmpd-stmt-stmts
+             `(,@(exp->ir t0 (car (stx:funccall-exp-paramlist exp)))
+               ,(ir-stx:print-stmt t0)))))
+         ;print以外
+         (let ((tlist (map (lambda (x) (fresh-tmpvar)) (stx:funccall-exp-paramlist exp))))
+           `(,(ir-stx:cmpd-stmt
+               ;cmpd-stmt-decls
+               (map (lambda (x) (ir-stx:var-decl x)) tlist)
+               ;cmpd-stmt-stmts
+               `(,@(list-nest-append (map (lambda (x y) (exp->ir x y)) tlist (stx:funccall-exp-paramlist exp)))
+                 ,(ir-stx:call-stmt dest (stx:funccall-exp-tgt exp) tlist)))))))
     ((stx:aop-exp? exp)
      (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
-        ;cmpd-stmt-decls
-        (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
-        ;cmpd-stmt-stmts
-        `(,@(exp->ir t0 (stx:aop-exp-left exp))  ;t0 = left
-         ,@(exp->ir t1 (stx:aop-exp-right exp)) ;t1 = right
-         ,(ir-stx:assign-stmt dest (ir-stx:aop-exp (stx:aop-exp-op exp) t0 t1)))))))
+           ;cmpd-stmt-decls
+           (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
+           ;cmpd-stmt-stmts
+           `(,@(exp->ir t0 (stx:aop-exp-left exp))  ;t0 = left
+             ,@(exp->ir t1 (stx:aop-exp-right exp)) ;t1 = right
+             ,(ir-stx:assign-stmt dest (ir-stx:aop-exp (stx:aop-exp-op exp) t0 t1)))))))
     ((stx:rop-exp? exp)
      (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
@@ -177,7 +201,7 @@
     ((stx:logical-and-or-expr? exp)
      (cond
        ((equal? 'and (stx:logical-and-or-expr-op exp))
-            ((let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)) (L0 (fresh-label)) (L1 (fresh-label)) (L2 (fresh-label)) (L3 (fresh-label)))
+            (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)) (L0 (fresh-label)) (L1 (fresh-label)) (L2 (fresh-label)) (L3 (fresh-label)))
                `(,(ir-stx:cmpd-stmt
                    ;cmpd-stmt-decls
                    (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
@@ -192,10 +216,10 @@
                       ,(ir-stx:goto-stmt L3)                            ;goto L3;
                       ,L1                                               ;label L1;
                       ,(ir-stx:assign-stmt dest (ir-stx:lit-exp 0))     ;dest = 0;
-                      ,L3))))))                                         ;label L3;
+                      ,L3)))))                                         ;label L3;
                                                      
            ((equal? 'or (stx:logical-and-or-expr-op exp))
-            ((let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)) (L0 (fresh-label)) (L1 (fresh-label)) (L2 (fresh-label)) (L3 (fresh-label)))
+            (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)) (L0 (fresh-label)) (L1 (fresh-label)) (L2 (fresh-label)) (L3 (fresh-label)))
                `(,(ir-stx:cmpd-stmt
                    ;cmpd-stmt-decls
                    (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
@@ -210,7 +234,7 @@
                       ,(ir-stx:goto-stmt L3)                            ;goto L3;
                       ,L1                                               ;label L1;
                       ,(ir-stx:assign-stmt dest (ir-stx:lit-exp 1))     ;t2 = 1;
-                      ,L3))))))                                         ;label L3;
+                      ,L3)))))                                          ;label L3;
            (else (error "unknown logical op"))))
     (else (error "kinojunkai"))))
 
