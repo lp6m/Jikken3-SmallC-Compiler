@@ -269,11 +269,15 @@
                            (stx:for-stmt-pos tree))))
         ((stx:neg-exp? tree) (stx:expression #t (list (stx:aop-exp '- (stx:lit-exp 0  (stx:neg-exp-pos tree)) (remove-syntax-sugar (stx:neg-exp-arg tree)) (stx:neg-exp-pos tree))) (stx:neg-exp-pos tree)))
         ((stx:deref-exp? tree)(stx:deref-exp (remove-syntax-sugar (stx:deref-exp-arg tree)) (stx:deref-exp-pos tree)))
-        ((stx:addr-exp? tree) ;addr-の下が要素1個のexpressionでありそれがderefであれば外す
+        ((stx:addr-exp? tree) 
          (let ((x (remove-syntax-sugar (stx:addr-exp-var tree))))
-             (if (and (stx:expression? x) (stx:deref-exp? (car (stx:expression-explist x))))
-                 (remove-syntax-sugar (stx:deref-exp-arg (car (stx:expression-explist x))))
-                 (stx:addr-exp x (stx:addr-exp-pos tree)))))
+           (cond
+             ;addr-の下が要素1個のexpressionでありそれがderefであれば外す
+            ((and (stx:expression? x) (stx:deref-exp? (car (stx:expression-explist x))))
+             ;addr-の下が直接derefのこともある
+             (remove-syntax-sugar (stx:deref-exp-arg (car (stx:expression-explist x)))))
+            ((stx:deref-exp? x) (stx:deref-exp-arg x))
+            (else (stx:addr-exp x (stx:addr-exp-pos tree))))))
         ((stx:array-exp? tree) 
          (stx:deref-exp
           (stx:aop-exp '+ (remove-syntax-sugar (stx:array-exp-tgt tree)) (remove-syntax-sugar (stx:array-exp-index tree)) (stx:array-exp-pos tree)) (stx:array-exp-pos tree)))

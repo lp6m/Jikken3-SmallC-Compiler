@@ -393,9 +393,10 @@
            (set! rst (type-struct (type-struct-type rst) #t (type-struct-ispointer rst) (type-struct-ispointerpointer rst)))
            (let ((arraytype (cadr typelist)))
              (if (list? arraytype)
-                (begin (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (equal? (car arraytype) 'pointer) (type-struct-ispointerpointer rst)))
-                      (set! rst (type-struct (cadr arraytype) (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst))))
-                (set! rst (type-struct arraytype (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst))))
+                ;int*の配列->int**
+                (set! rst (type-struct (cadr arraytype) (type-struct-isarray rst) #t #t))
+                ;intの配列-> int*
+                (set! rst (type-struct arraytype (type-struct-isarray rst) #t #f)))
            (set! rst (type-struct (type-struct-type rst) (type-struct-isarray rst) (type-struct-ispointer rst) (type-struct-ispointerpointer rst)))
            rst))
         (if (equal? (car typelist) 'pointer)
@@ -539,7 +540,7 @@
              (right-type (type-check-exp (stx:assign-stmt-src exp))))
          (if (isequal-type left-type right-type)
             left-type
-            (error "代入式の左辺と右辺は同じ型である必要があります"))))
+            (begin (display (stx:assign-stmt-var exp)) (newline) (display left-type) (newline) (display (stx:assign-stmt-src exp)) (newline) (display right-type) (error "代入式の左辺と右辺は同じ型である必要があります")))))
       ;stx:funccall-exp
       ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
       ((stx:funccall-exp? exp)
@@ -585,7 +586,7 @@
               ;int** + int または int + int**
               ((or (and (isint-pointerpointer left-type) (isint right-type))
                   (and (isint-pointerpointer right-type) (isint left-type)))
-               (type-struct 'int #f #f #f))
+               (type-struct 'int #f #t #t))
               ;エラー
               (else (error "+演算において型違反"))))
            ;-演算
@@ -636,20 +637,25 @@
          ;*e eがint**ならint*つける
          ((isint-pointerpointer (type-check-exp (stx:deref-exp-arg exp)))
           (type-struct 'int #f #t #f))
-       (else (error "deref-expで型違反"))))
+       (else (begin 
+               (display (stx:deref-exp-arg exp))
+               (newline)
+               (display (type-check-exp (stx:deref-exp-arg exp)))
+               (newline)
+               (error "deref-expで型違反")))))
       ;stx:lit-exp
       ((stx:lit-exp? exp) (type-struct 'int #f #f #f))
       ;obj
       ((obj? exp)
        (let ((conv-rst (conv-typelist-to-struct (obj-type exp))))
-       (if (equal? #t (type-struct-isarray conv-rst))
+       ;(if (equal? #t (type-struct-isarray conv-rst))
           ;変数参照式なので intならint*に, int*ならint**にする
-          (cond
-            ((isint conv-rst) (type-struct 'int #t #t #f))
-            ((isint-pointer conv-rst) (type-struct 'int #t #t #t))
-            (else "変数参照で配列、要素がintかint*以外になっている"))
+        ;  (cond
+         ;   ((isint conv-rst) (type-struct 'int #t #t #f))
+          ;  ((isint-pointer conv-rst) (type-struct 'int #t #t #t))
+           ; (else "変数参照で配列、要素がintかint*以外になっている"))
           ;そのままかえす
-          conv-rst)))
+          conv-rst));)
       (else (begin (display exp) (error "exp 木の巡回エラー")))))
   
   (display (type-check-main ast)))
