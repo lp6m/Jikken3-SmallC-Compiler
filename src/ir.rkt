@@ -170,8 +170,9 @@
     ((stx:lit-exp? exp) `(,(ir-stx:assign-stmt dest (ir-stx:lit-exp (stx:lit-exp-val exp)))))
     ((semantic:obj? exp) `(,(ir-stx:assign-stmt dest (ir-stx:var-exp exp))))
     ((stx:assign-stmt? exp)
-     ;assign-stmtの左辺がobjの場合exp->irすると a = 3; の左辺aがexp->irされて変数参照かと思われて tmp = aみたいになって希望通りの動作をしない
-     (if (semantic:obj? (stx:assign-stmt-var exp))
+     (cond
+        ;assign-stmtの左辺がobjの場合exp->irすると a = 3; の左辺aがexp->irされて変数参照かと思われて tmp = aみたいになって希望通りの動作をしない
+       ((semantic:obj? (stx:assign-stmt-var exp))
          ;assign-stmtの左辺がobjなら左辺はexp->irしない
          (let ((t0 (fresh-tmpvar)))
            `(,(ir-stx:cmpd-stmt
@@ -180,9 +181,21 @@
                ;cmpd-stmt-stmts
                `(,@(exp->ir t0 (stx:assign-stmt-src exp))
                  ,(ir-stx:assign-stmt (stx:assign-stmt-var exp) (ir-stx:var-exp t0))
-                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0))))))
-         ;assign-stmtの左辺がobjでない(例えば a[2] = 3 => *(a + 2) = 3のとき)
-         (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0)))))))
+         ;assign-stmtの左辺がderef-expのときメモリへの書き込み:write-stmt
+         ((stx:deref-exp? (stx:assign-stmt-var exp))
+          (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
+            `(,(ir-stx:cmpd-stmt
+                ;cmpd-stmt-decls
+                (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
+                ;cmpd-stmt-stmts
+                `(,@(exp->ir t0 (stx:assign-stmt-var exp))
+                  ,@(exp->ir t1 (stx:assign-stmt-src exp))
+                  ,(ir-stx:write-stmt t0 t1)
+                  ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1)))))))
+         ;assign-stmtの左辺がobjでもderefでもないとき:こんなときある？
+         (else
+          (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
            `(,(ir-stx:cmpd-stmt
                ;cmpd-stmt-decls
                (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
@@ -190,7 +203,7 @@
                `(,@(exp->ir t0 (stx:assign-stmt-var exp))　;a *(a+2)
                  ,@(exp->ir t1 (stx:assign-stmt-src exp))
                  ,(ir-stx:assign-stmt t0 (ir-stx:var-exp t1))
-                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1))))))))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1)))))))))
     ((stx:deref-exp? exp)
      (let ((t0 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
