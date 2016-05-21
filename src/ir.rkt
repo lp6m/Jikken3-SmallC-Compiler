@@ -154,9 +154,31 @@
            ;cmpd-stmt-decls
            (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
            ;cmpd-stmt-stmts
-           `(,@(exp->ir t0 (stx:aop-exp-left exp))  ;t0 = left
-             ,@(exp->ir t1 (stx:aop-exp-right exp)) ;t1 = right
-             ,(ir-stx:assign-stmt dest (ir-stx:aop-exp (stx:aop-exp-op exp) t0 t1)))))))
+           ;opが+または-のとき,ポインタ演算の場合がある.整数値及び整数型の変数は4倍する必要がある
+           ;semantic.rktのtype-check関数を利用して型を調べる
+           (let
+               ((left-type (semantic:type-check-exp (stx:aop-exp-left exp)))
+                (right-type (semantic:type-check-exp (stx:aop-exp-right exp)))
+                (left-ast (stx:aop-exp-left exp))
+                (right-ast (stx:aop-exp-right exp))
+                (type-rst 0)) ;0でなにもなし 1で左辺を4倍 2で右辺を4倍
+             (begin
+               ;4倍する必要あるか調べてtype-rstを書き換える ;型検査で既にエラーは弾いているのでエラー処理は考えない
+               (cond
+                 ((and (semantic:isint left-type) (semantic:isint-pointer right-type)) (set! type-rst 1))
+                 ((and (semantic:isint left-type) (semantic:isint-pointerpointer right-type)) (set! type-rst 1))
+                 ((and (semantic:isint right-type) (semantic:isint-pointer left-type)) (set! type-rst 2))
+                 ((and (semantic:isint right-type) (semantic:isint-pointerpointer left-type)) (set! type-rst 2))
+                 (else (set! type-rst 0)))
+               ;type-rstに基づいて構文木の書き換えを行う/行わない
+               (cond
+                 ((= type-rst 1) (set! left-ast (stx:aop-exp '* (stx:lit-exp 4 `()) left-ast `())))
+                 ((= type-rst 2) (set! right-ast (stx:aop-exp '* (stx:lit-exp 4 `()) right-ast `()))))
+               ;返り値
+               `(,@(exp->ir t0 left-ast)  ;t0 = left
+                 ,@(exp->ir t1 right-ast) ;t1 = right
+                 ,(ir-stx:assign-stmt dest (ir-stx:aop-exp (stx:aop-exp-op exp) t0 t1)))))))))
+                 
     ((stx:rop-exp? exp)
      (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
@@ -182,15 +204,17 @@
                `(,@(exp->ir t0 (stx:assign-stmt-src exp))
                  ,(ir-stx:assign-stmt (stx:assign-stmt-var exp) (ir-stx:var-exp t0))
                  ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0)))))))
-         ;assign-stmtの左辺がderef-expのときメモリへの書き込み:write-stmt
-         ((stx:deref-exp? (stx:assign-stmt-var exp))
+       ;assign-stmtの左辺がderef-expのときメモリへの書き込み:write-stmt
+       ;int *a; *a = 3;      => t0 = a; t1 = 3; write-stmt t0 t1
+       ;int a[10]; a[2] = 3; => t0 = a; t1 = 2; t2 = t0 + t1; t3 = 3; write-stmt t2 t3
+         ((stx:deref-exp? (stx:assign-stmt-var exp)) 
           (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
             `(,(ir-stx:cmpd-stmt
                 ;cmpd-stmt-decls
                 (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
                 ;cmpd-stmt-stmts
-                `(,@(exp->ir t0 (stx:assign-stmt-var exp))
-                  ,@(exp->ir t1 (stx:assign-stmt-src exp))
+                `(,@(exp->ir t0 (stx:deref-exp-arg (stx:assign-stmt-var exp))) ;deref-expの中身をt0に入れる.(exp->ir t0 (stx:assign-stmt-var exp))ではないことに注意.
+                  ,@(exp->ir t1 (stx:assign-stmt-src exp)) 
                   ,(ir-stx:write-stmt t0 t1)
                   ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1)))))))
          ;assign-stmtの左辺がobjでもderefでもないとき:こんなときある？
