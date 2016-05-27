@@ -523,41 +523,28 @@
       ;stx:declaration
         ;declistの中のobjがすべて正しいか調べる
       ((stx:declaration? ast)
-       (with-handlers ((exn:fail? 
-                        (lambda (e) (error (format "~a:~a: stx:declaration"
-                                                   (position-line (stx:declaration-pos ast))
-                                                   (position-col (stx:declaration-pos ast)))))))
-         (type-check-main (stx:declaration-declist ast))
-         (type-check-main (stx:declaration-declist ast))))
+         (type-check-main (stx:declaration-declist ast)))
       ;stx:func-prototype
       ;プロトタイプ宣言自身のobjとパラメータリストがすべて#tならOK
       ((stx:func-prototype? ast)
-       (with-handlers ((exn:fail? 
-                             (lambda (e) (error (format "~a:~a: stx:func-prototype"
-                                                        (position-line (stx:func-prototype-pos ast))
-                                                        (position-col (stx:func-prototype-pos ast)))))))
-         (and
+       (begin
           (type-check-main (stx:func-prototype-var-decl ast))
-          (type-check-main (stx:func-prototype-declarator ast)))
+          (type-check-main (stx:func-prototype-declarator ast))
            #t))
       ;stx:func-definition
       ;関数定義自身のobjとパラメータリストと関数定義の複文本体がすべて#tならOK
       ((stx:func-definition? ast)
-       (with-handlers ((exn:fail? 
-                             (lambda (e) (error (format "~a:~a: stx:func-definition type-check-error"
-                                                        (position-line (stx:func-definition-pos ast))
-                                                        (position-col (stx:func-definition-pos ast)))))))
-       (and
-        (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
-          (begin
-            (set! now-func-type-struct
-                  (conv-typelist-to-struct
-                   (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
-                               (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
-            rst))
-        (type-check-main (stx:func-definition-declarator ast))
-        (type-check-main (stx:func-definition-statement ast)))
-         #t))
+       (begin
+         (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
+           (begin
+             (set! now-func-type-struct
+                   (conv-typelist-to-struct
+                    (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
+                                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
+             rst))
+         (type-check-main (stx:func-definition-declarator ast))
+         (type-check-main (stx:func-definition-statement ast))
+       #t))
          
       
       ;stx:compound-stmt
@@ -633,9 +620,14 @@
     ((stx:assign-stmt? exp)
      (let ((left-type (type-check-exp (stx:assign-stmt-var exp)))
            (right-type (type-check-exp (stx:assign-stmt-src exp))))
-       (if (isequal-type left-type right-type)
-           left-type
-           (begin (display (stx:assign-stmt-var exp)) (newline) (display left-type) (newline) (display (stx:assign-stmt-src exp)) (newline) (display right-type) (error "代入式の左辺と右辺は同じ型である必要があります")))))
+       (if (not (or (stx:deref-exp? (stx:assign-stmt-var exp)) (obj? (stx:assign-stmt-var exp))))
+           (error (format "~a:~a: the left operand type of assign-statement is incorrect."
+                          (position-line (stx:assign-stmt-pos exp))
+                          (position-col (stx:assign-stmt-pos exp))))
+           (if (isequal-type left-type right-type)
+               left-type
+               (error (format "the left operand type and the right operand type of assign-statement be same."))))))
+           ;(begin (display (stx:assign-stmt-var exp)) (newline) (display left-type) (newline) (display (stx:assign-stmt-src exp)) (newline) (display right-type) (error "代入式の左辺と右辺は同じ型である必要があります")))))
     ;stx:funccall-exp
     ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
     ((stx:funccall-exp? exp)
