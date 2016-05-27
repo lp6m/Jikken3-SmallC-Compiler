@@ -9,7 +9,7 @@
 (define (list-nest-append lists)
   (if (null? lists)
      `()
-     (append (car lists) (list-nest-append (cdr lists)))))
+      (append (car lists) (list-nest-append (cdr lists)))))
 ;色々な値を初期化する関数
 (define (initialize-parms)
   (begin
@@ -239,7 +239,7 @@
     ((stx:addr-exp? exp) 
      ;addr-expのvarがすでにobjならすぐ返す
      (if (semantic:obj? (stx:addr-exp-var exp))
-         (ir-stx:assign-stmt dest (ir-stx:addr-exp (stx:addr-exp-var exp)))
+         `(,(ir-stx:assign-stmt dest (ir-stx:addr-exp (stx:addr-exp-var exp)))) ;fix
          ;expressionなどであれば分解する
          ((let ((t0 (fresh-tmpvar)))
             `(,(ir-stx:cmpd-stmt
@@ -357,7 +357,9 @@
     ((ir-stx:ret-stmt? ir)
      (begin
        (display "return ")
-       (display (semantic:obj-name (ir-stx:ret-stmt-var ir)))
+       (if (null? (ir-stx:ret-stmt-var ir))
+           (display "")
+           (display (semantic:obj-name (ir-stx:ret-stmt-var ir))))
        (newline)))
     ((ir-stx:print-stmt? ir)
      (begin
