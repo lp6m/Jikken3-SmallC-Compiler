@@ -131,7 +131,7 @@
                   (reverse (cdr (reverse (stx:expression-explist exp))))) ;最後以外
            ,@(exp->ir dest (car (reverse (stx:expression-explist exp))))))))
     ((stx:funccall-exp? exp)
-     (if (equal? 'print (stx:funccall-exp-tgt exp))
+     (if (equal? 'print (semantic:obj-name (stx:funccall-exp-tgt exp)))
          ;print文
          (let ((t0 (fresh-tmpvar)))
            `(,(ir-stx:cmpd-stmt
@@ -349,9 +349,9 @@
      (begin
        (display (semantic:obj-name (ir-stx:call-stmt-dest ir)))
        (display " = ")
-       (display (ir-stx:call-stmt-tgt ir))
+       (display (semantic:obj-name (ir-stx:call-stmt-tgt ir)))
        (display "(")
-       (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display " "))) (ir-stx:call-stmt-vars ir))
+       (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display ","))) (ir-stx:call-stmt-vars ir))
        (display ")")
        (newline)))
     ((ir-stx:ret-stmt? ir)
@@ -399,4 +399,4 @@
 (define (ir-main filename)
   (begin
     (initialize-parms)    
-    (ast->ir (semantic:semantic-analysis (parser:parse-file filename)))))
+    (ast->ir (semantic:semantic-analysis-file filename))))

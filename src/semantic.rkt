@@ -1,7 +1,10 @@
 #lang racket
 (provide (all-defined-out))
-(require (prefix-in parser: "parser.rkt")
-         (prefix-in stx:    "parser-syntax.rkt"))
+(require 
+  parser-tools/lex
+  (prefix-in : parser-tools/lex-sre)
+  (prefix-in parser: "parser.rkt")
+  (prefix-in stx:    "parser-syntax.rkt"))
 ;オブジェクト情報をもつ構造体
 (struct obj (name lev kind type) #:transparent)
 ;kind = var parm fun proto 
@@ -18,12 +21,12 @@
 (define (search-func-by-name name)
   (define (search-func-by-name-main name tgt-list)
     (if (null? tgt-list)
-       #f
-       (if (equal? (caar tgt-list) name)
-          (car tgt-list)
-          (search-func-by-name-main name (cdr tgt-list)))))
+        #f
+        (if (equal? (caar tgt-list) name)
+            (car tgt-list)
+            (search-func-by-name-main name (cdr tgt-list)))))
   (search-func-by-name-main name func-def-list))
-  
+
 
 ;parser.rkt内のparse-fileやparse-string関数で返る抽象構文木を受け取り,
 ;オブジェクト情報を収集して,2重宣言があれば即時エラーを吐く.
@@ -33,14 +36,14 @@
   ;(int), (pointer int), (array (pointer int) 10), (array int 10)のいずれかの形式をかえす.
   (define (var-decl-totype decl) 
     (if (stx:var-decl-isarray decl)
-       (if (stx:var-decl-ispointer decl)
-          (list 'array (list 'pointer (stx:var-decl-type decl)) (stx:var-decl-num decl))
-          (list 'array (stx:var-decl-type decl) (stx:var-decl-num decl)))
-       (if (stx:var-decl-ispointer decl)
-          (list 'pointer (stx:var-decl-type decl))
-          (list (stx:var-decl-type decl)))))
-
-   ;var-declからlev,kindを指定したobj構造体をかえす
+        (if (stx:var-decl-ispointer decl)
+            (list 'array (list 'pointer (stx:var-decl-type decl)) (stx:var-decl-num decl))
+            (list 'array (stx:var-decl-type decl) (stx:var-decl-num decl)))
+        (if (stx:var-decl-ispointer decl)
+            (list 'pointer (stx:var-decl-type decl))
+            (list (stx:var-decl-type decl)))))
+  
+  ;var-declからlev,kindを指定したobj構造体をかえす
   (define (var-decl-toobj decl lev kind)
     (obj (stx:var-decl-id decl) lev kind (var-decl-totype decl)))
   
@@ -55,93 +58,92 @@
           (map
            (lambda (x)
              (let* ((newobj (var-decl-toobj x lev 'var))
-                    (rst (add-ref-env obj-env newobj)))　　　　　　　　　　　;環境にオブジェクトを追加した結果をrstに入れる
-               (begin (set! obj-env (cdr rst)) (car rst)))) declist))　　 ;環境を更新
+                    (rst (add-ref-env obj-env newobj (stx:declaration-pos ast))))　;環境にオブジェクトを追加した結果をrstに入れる
+               (begin (set! obj-env (cdr rst)) (car rst)))) declist))　　          ;環境を更新
         (stx:declaration-pos ast)))
       ;stx:func-prototype　'protoのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-prototype? ast)
        (let* ((proto-declarator-objlist　　　　　　　;引数のobj構造体のリスト
                (if (null? (stx:func-prototype-declarator ast))
-                  `()
-                  (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast))))
-               (proto-declarator-obj-typelist       ;引数のobjのtypeのリスト
-                (if (null? proto-declarator-objlist)
+                   `()
+                   (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-prototype-declarator ast))))
+              (proto-declarator-obj-typelist       ;引数のobjのtypeのリスト
+               (if (null? proto-declarator-objlist)
                    `()
                    (map (lambda (x) (obj-type x)) proto-declarator-objlist)))
-               (proto-obj                                  ;protoのobj構造体.typeに引数の型情報が必要なので追加.具体的にはprotoのobj構造体のtypeに引数のtypeリストをappendする.
-                (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)))
-                  (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))))
+              (proto-obj  ;protoのobj構造体.typeに引数の型情報が必要なので追加.具体的にはprotoのobj構造体のtypeに引数のtypeリストをappendする.
+               (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev 'proto)))
+                 (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))))
          ;返り値はここ
          (stx:func-prototype
-            (let* ((rst (add-ref-env  obj-env proto-obj)))　    ;プロトタイプ宣言のobjを環境に追加した結果をrstに入れる
-              (set! obj-env (cdr rst))　　　　　　　　　　                 ;環境を更新
-              (car rst))　　　　　　　　　　　　　　　　　　　　　　　　　　　　 ;(car rst)がプロトタイプ宣言のobj
-            
-            (begin                                                               ;プロトタイプ宣言のパラメータのobjリスト
-              (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
-              (map (lambda (x)                                            ;パラメータを環境に追加していく
-                     (begin (let ((rst (add-ref-env obj-env x)))
-                              (set! obj-env (cdr rst)))))
-                  proto-declarator-objlist)
-              (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
-              proto-declarator-objlist)
+          (let* ((rst (add-ref-env  obj-env proto-obj (stx:func-prototype-pos ast))));プロトタイプ宣言のobjを環境に追加した結果をrstに入れる
+            (set! obj-env (cdr rst))　　　　　　　　　　         ;環境を更新
+            (car rst))　　　　　　　　　　　　　　　　　　　　　　　;(car rst)がプロトタイプ宣言のobj
+          
+          (begin                                              ;プロトタイプ宣言のパラメータのobjリスト
+            (set! obj-env (add-new-level-to-env obj-env))     ;新しいレベルを環境に追加
+            (map (lambda (x)                                  ;パラメータを環境に追加していく
+                   (begin (let ((rst (add-ref-env obj-env x (stx:func-prototype-pos ast))))
+                            (set! obj-env (cdr rst)))))
+                 proto-declarator-objlist)
+            (set! obj-env (pop-top-env obj-env))              ;最後に新しいレベルの環境をpop
+            proto-declarator-objlist)
           (stx:func-prototype-pos ast))))
       
       ;stx:func-definition　'funのobj構造体のtypeはconsセルで,carは関数自体の型情報,cdrは引数の型情報のリストが入っている（consというか結局はリスト）
       ((stx:func-definition? ast)
        (let* ((fun-declarator-objlist                ;引数のobj構造体のリスト
                (if (null? (stx:func-definition-declarator ast))
-                  `()
-                  (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-definition-declarator ast))))
-              (fun-declarator-obj-typelist          ;引数のobjのtypeのリスト
+                   `()
+                   (map (lambda (x) (var-decl-toobj x (+ lev 1) 'parm)) (stx:func-definition-declarator ast))))
+              (fun-declarator-obj-typelist           ;引数のobjのtypeのリスト
                (if (null? fun-declarator-objlist)
-                  `()
-                  (map (lambda (x) (obj-type x)) fun-declarator-objlist)))
+                   `()
+                   (map (lambda (x) (obj-type x)) fun-declarator-objlist)))
               (def-obj　　　　　　　　　　　　　　　　　　　;funのobj構造体.typeに引数の型情報が必要なので追加.具体的にはfunのobj構造体のtypeに引数のtypeリストをappendする.
                 (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev 'fun)))
                   (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist))))
+              
+              
+              (func-def-rst
+               (stx:func-definition
+                (let* ((rst (add-ref-env  obj-env def-obj (stx:func-definition-pos ast)))) ;関数定義のobjを環境に追加した結果をrstに入れる
+                  (begin
+                    (set! obj-env (cdr rst))　　　　　　　　　　        ;環境を更新
+                    (set! func-def-list                              ;型検査で使うfunc-def-listを更新
+                          (append
+                           (list (append
+                                  (list (obj-name (car rst)))
+                                  (obj-type (car rst)))) func-def-list))
+                    (car rst)))                                      ;(car rst)が関数定義のobj
                 
-         
-         (func-def-rst
-          (stx:func-definition
-           (let* ((rst (add-ref-env  obj-env def-obj)))       　;関数定義のobjを環境に追加した結果をrstに入れる
-             (begin
-               (set! obj-env (cdr rst))　　　　　　　　　　               ;環境を更新
-               (set! func-def-list                                           ;型検査で使うfunc-def-listを更新
-                    (append
-                     (list (append
-                            (list (obj-name (car rst)))
-                            (obj-type (car rst)))) func-def-list))
-             (car rst)))                                                         ;(car rst)が関数定義のobj
-           
-           (begin                                                               ;関数定義のパラメータのobjリスト
-             (set! obj-env (add-new-level-to-env obj-env))  ;新しいレベルを環境に追加
-             (map (lambda (x)                                            ;パラメータを環境に追加していく
-                    (begin (let ((rst (add-ref-env obj-env x)))
-                             (set! obj-env (cdr rst)))))
+                (begin                                               ;関数定義のパラメータのobjリスト
+                  (set! obj-env (add-new-level-to-env obj-env))      ;新しいレベルを環境に追加
+                  (map (lambda (x)                                   ;パラメータを環境に追加していく
+                         (begin (let ((rst (add-ref-env obj-env x (stx:func-definition-pos ast))))
+                                  (set! obj-env (cdr rst)))))
+                       fun-declarator-objlist)
                   fun-declarator-objlist)
-             
-             fun-declarator-objlist)
-           (collect-object-main (stx:func-definition-statement ast) (+ lev 1));compound-stmtの中身を展開（オブジェクト情報を収集）
-           (stx:func-definition-pos ast))))
+                (collect-object-main (stx:func-definition-statement ast) (+ lev 1));compound-stmtの中身を展開（オブジェクト情報を収集）
+                (stx:func-definition-pos ast))))
          (begin
-           (set! obj-env (pop-top-env obj-env))                ;最後に新しいレベルの環境をpop
+           (set! obj-env (pop-top-env obj-env))                      ;最後に新しいレベルの環境をpop
            func-def-rst)))
-           
+      
       ;stx:compound-stmt
       ((stx:compound-stmt? ast)
        (begin
-         (set! obj-env (add-new-level-to-env obj-env))        　　　　　　　　;新しいレベルを環境に追加
-         (let ((rst　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　;rstが評価する値 compound-stmtの中をチェック
+         (set! obj-env (add-new-level-to-env obj-env))        　　　　;新しいレベルを環境に追加
+         (let ((rst　　　　　　　　　　　　　　　　　　　　　　　　　　　　 ;rstが評価する値 compound-stmtの中をチェック
                 (stx:compound-stmt
-               (if (null? (stx:compound-stmt-declaration-list-opt ast))
-                  `()
+                 (if (null? (stx:compound-stmt-declaration-list-opt ast))
+                   `()
                   (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-declaration-list-opt ast)))
                (if (null? (stx:compound-stmt-statement-list-opt ast))
-                  `()
+                   `()
                   (map (lambda (x) (collect-object-main x (+ lev 1))) (stx:compound-stmt-statement-list-opt ast)))
                (stx:compound-stmt-pos ast))))
-           (set! obj-env (pop-top-env obj-env))　　　　　　　　　　　　　　　　　　;最後に新しいレベルの環境をpop
+           (set! obj-env (pop-top-env obj-env))　　　　　　　　　　　　 ;最後に新しいレベルの環境をpop
            rst)))
       ;stx:expression
       ((stx:expression? ast)
@@ -149,12 +151,6 @@
         (stx:expression-iskakko ast)
         (map (lambda (x) (collect-object-main x lev)) (stx:expression-explist ast))
         (stx:expression-pos ast)))
-      ;stx:func-call
-      ((stx:funccall-exp? ast)
-       (stx:funccall-exp
-        (stx:funccall-exp-tgt ast)
-        (collect-object-main (stx:funccall-exp-paramlist ast) lev)
-        (stx:funccall-exp-pos ast)))
       ;stx:aop-exp
       ((stx:aop-exp? ast)
        (stx:aop-exp
@@ -211,7 +207,7 @@
         (collect-object-main (stx:deref-exp-arg ast) lev)
         (stx:deref-exp-pos ast)))
       ;stx:var-decl
-      ((stx:var-decl? ast) (error "var-declになることはないはずなので木の巡回エラーです"))
+      ((stx:var-decl? ast) (error "tree-walk-error:var-decl"))
       ;stx:lit-exp
       ((stx:lit-exp? ast) ast)
       ;stx:var-exp
@@ -220,19 +216,40 @@
        (let* ((dummy-obj (obj (stx:var-exp-tgt ast) 0 'var `())) ;seach-envはobj構造体との一致を調べるので検索用にvar-expをobj構造体に変換 name以外のメンバはダミー
               (search-rst (search-env-by-obj-name obj-env dummy-obj)))         ;環境から検索
          (if search-rst                                                                
-            (if (or (equal? 'var (obj-kind search-rst)) (equal? 'parm (obj-kind search-rst)))                          ;見つかった場合,varかparmとして宣言されているか確認
-               search-rst                                                                ;varかparmであれば見つかったobjをかえす
-               (begin (display ast) (error "その変数は変数またはパラメータ以外で宣言されています")))　　　　　　　 ;funやprotoとして定義されている
-            (begin (display ast) (error "その変数は未定義です")))))                                   ;見つからなかった場合,未定義
+             (if (or (equal? 'var (obj-kind search-rst)) (equal? 'parm (obj-kind search-rst))) ;見つかった場合,varかparmとして宣言されているか確認
+                search-rst                                                                     ;varかparmであれば見つかったobjをかえす
+               (error (format
+                              "~a:~a: stx:var-exp: ~a is defined as function-definition or function-prototype not as variable."
+                              (position-line (stx:var-exp-pos ast))
+                              (position-col (stx:var-exp-pos ast))
+                              (stx:var-exp-tgt ast))))                                            ;funやprotoとして定義されている
+            (error (format
+                    "~a:~a: stx:var-exp: ~a is undefined."
+                    (position-line (stx:var-exp-pos ast))
+                    (position-col (stx:var-exp-pos ast))
+                    (stx:var-exp-tgt ast))))))                                          ;見つからなかった場合,未定義
       ;stx:func-call-exp
       ((stx:funccall-exp? ast)
-       (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 'fun `())) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
-              (search-rst (search-env-by-obj-name obj-env dummy-obj)))
-         (if search-rst
-              (if (equal? 'fun (obj-kind search-rst))                               ;見つかった場合,funとして宣言されているか確認 （ちなみに,protoである可能性はない。BNF的に,かならずプロトタイプ宣言のあとに関数定義がある為。）
-                 search-rst                                                                    ;funであれば見つかったobjをかえす
-                 (error "関数以外で宣言されています"))                                 ;varやprotoとして定義されている
-              (error "その関数は未定義です"))))                                        ;見つからなかった場合,未定義
+       (stx:funccall-exp
+        ;stx:funccall-exp-tgt
+        (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 'fun `())) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
+               (search-rst (search-env-by-obj-name obj-env dummy-obj)))
+          (if search-rst
+              (if (or (equal? 'fun (obj-kind search-rst)) (equal? 'proto (obj-kind search-rst)))  ;見つかった場合,funまたはprotoとして宣言されているか確認
+                  search-rst                                                                      ;funまたはobjであれば見つかったobjをかえす
+                  (error (format
+                          "~a:~a: stx:funccall-exp ~a is defined as variable not as function-definition or function-prototype."
+                          (position-line (stx:funccall-exp-pos ast))
+                          (position-col (stx:funccall-exp-pos ast))
+                          (stx:funccall-exp-tgt ast))))                                          ;varして定義されている
+              (error (format
+                      "~a:~a: stx:funccall-exp ~a is undefined."
+                      (position-line (stx:funccall-exp-pos ast))
+                      (position-col (stx:funccall-exp-pos ast))
+                      (stx:funccall-exp-tgt ast)))))                                            ;見つからなかった場合,未定義
+        ;stx:funccall-exp-paramlist
+        (collect-object-main (stx:funccall-exp-paramlist ast) lev)
+        (stx:funccall-exp-pos ast)))
        ;else
       (else ast)))
   
@@ -258,115 +275,165 @@
           (search-env-by-obj-name (cdr env) tgt-obj))))
 
 ;環境からobjを参照し,なければ環境の先頭にobjを追加
-(define (add-ref-env env newobj) 
-  (define (add-ref-env-main env newobj)
-    ;newobjとnameが一致するobjを環境から検索
-    (let* ((search-rst (search-env-by-obj-name env newobj))); (hoge (display search-rst)))
-      ;環境に新しく追加するオブジェクトの種類によって変更
-      (cond
-        ;新しいobjが変数宣言のとき
-        ((equal? (obj-kind newobj) 'var)
-         (if search-rst
-            ;既にnameが一致するオブジェクトが存在するとき
-            (let ((error-flg
-                   ;検索されたオブジェクトの種類によって処理を分岐
-                   (cond
-                     ;関数宣言で既にあるとき,その関数宣言のレベルが0であればエラー
-                     ((equal? (obj-kind search-rst) 'fun)
-                      (if (equal? 0 (obj-lev newobj))
-                         (error "functionとvarで同名の宣言は不可")
+(define (add-ref-env env newobj pgpos) 
+  ;newobjとnameが一致するobjを環境から検索
+  (let* ((search-rst (search-env-by-obj-name env newobj))); (hoge (display search-rst)))
+    ;環境に新しく追加するオブジェクトの種類によって変更
+    (cond
+      ;新しいobjが変数宣言のとき
+      ((equal? (obj-kind newobj) 'var)
+       (if search-rst
+           ;既にnameが一致するオブジェクトが存在するとき
+           (let ((error-flg
+                  ;検索されたオブジェクトの種類によって処理を分岐
+                  (cond
+                    ;関数宣言または関数プロトタイプ宣言で既にあるとき,その関数宣言のレベルが0であればエラー
+                    ((or (equal? (obj-kind search-rst) 'fun) (equal? (obj-kind search-rst) 'proto))
+                     (if (equal? 0 (obj-lev newobj))
+                         (error (format 
+                                 "~a:~a: stx:declaration ~a is already defined as function-definition."
+                                 (position-line pgpos)
+                                 (position-col pgpos)
+                                 (obj-name newobj)))
                          #f))
-                     ;変数宣言で既にあるとき,新しいオブジェクトとレベルが同じならエラー
-                     ((equal? (obj-kind search-rst) 'var)
-                      (if (equal? (obj-lev newobj) (obj-lev search-rst))
-                         (error "既に同じレベルでの変数宣言があります")
+                    ;変数宣言で既にあるとき,新しいオブジェクトとレベルが同じならエラー
+                    ((equal? (obj-kind search-rst) 'var)
+                     (if (equal? (obj-lev newobj) (obj-lev search-rst))
+                         (error (format
+                                 "~a:~a: stx:declaration ~a is already defined as variable in the same level."
+                                 (position-line pgpos)
+                                 (position-col pgpos)
+                                 (obj-name newobj)))
                          #f))
-                     ;関数パラメータで既にあるとき,警告を表示して登録
-                     ((equal? (obj-kind search-rst) 'parm)
-                      (begin (display "警告======!!") #f))
-                     (else (error "unknown obj-kind")))))
-              (if error-flg
+                    ;関数パラメータで既にあるとき,警告を表示して登録
+                    ((equal? (obj-kind search-rst) 'parm)
+                     (begin (eprintf "warning: ~a:~a: stx:declaration ~a is already defined as function-param."
+                                     (position-line pgpos)
+                                     (position-col pgpos)
+                                     (obj-name newobj))
+                            #f))
+                    (else (begin (display search-rst) (error "unknown obj-kind"))))))
+             (if error-flg
                  (error "ここにはこない")
                  (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                    (if (null? (cdr env))
-                      (cons newobj `(,top-env))
-                      (cons newobj `(,top-env ,@(cdr env)))))))
-            ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
-              (if (null? (cdr env))
+                       (cons newobj `(,top-env))
+                       (cons newobj `(,top-env ,@(cdr env)))))))
+           ;既にnameが一致するオブジェクトが存在しないとき→登録
+           (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+             (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-        ;新しいobjが関数パラメータ宣言のとき
-        ((equal? (obj-kind newobj) 'parm)
-         (if search-rst
-            ;既にnameが一致するオブジェクトが存在するとき
-            ;パラメータ二重宣言ならエラー
-            (if (equal? (obj-kind search-rst) 'parm)
-               (error "パラメータで二重宣言")
+      ;新しいobjが関数パラメータ宣言のとき
+      ((equal? (obj-kind newobj) 'parm)
+       (if search-rst
+           ;パラメータ二重宣言ならエラー
+           (if (equal? (obj-kind search-rst) 'parm)
+               (error (format
+                       "~a:~a: stx:function-prototype-parm ~a is already defined as the function-param in the same function."
+                       (position-line pgpos)
+                       (position-col pgpos)
+                       (obj-name newobj)))
                ;登録
                (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                  (if (null? (cdr env))
-                    (cons newobj `(,top-env))
-                    (cons newobj `(,top-env ,@(cdr env))))))
-            ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
-              (if (null? (cdr env))
+                     (cons newobj `(,top-env))
+                     (cons newobj `(,top-env ,@(cdr env))))))
+           ;既にnameが一致するオブジェクトが存在しないとき→登録
+           (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+             (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-        ;新しいobjが関数プロトタイプ宣言のとき type(関数の型と引数の型情報）が一致してるかを調べ、一致しないならエラー 一致なら登録もせず元の環境をかえす
-        ((equal? (obj-kind newobj) 'proto)
-         (if search-rst
-            ;既にnameが一致するオブジェクトが存在するとき
-            (if (equal? (obj-type newobj) (obj-type search-rst))
-               (cons newobj env) 　　　　　　　　　　　　　　　　　　　　;型情報が既に存在するものと一致する場合、更新せずにかえす
-               (error "型情報の違う二重プロトタイプ宣言はエラー"))
-            ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
-              (if (null? (cdr env))
+      ;新しいobjが関数プロトタイプ宣言のとき type(関数の型と引数の型情報）が一致してるかを調べ、一致しないならエラー 一致なら登録もせず元の環境をかえす
+      ((equal? (obj-kind newobj) 'proto)
+       (if search-rst
+           ;既にnameが一致するオブジェクトが存在するとき
+           (cond
+             ;既に変数として存在するとき
+             ((equal? (obj-type search-rst) 'var)
+              (error (format
+                      "~a:~a stx:function-prototype: ~a is already defined as var."
+                      (position-line pgpos)
+                      (position-col pgpos)
+                      (obj-name newobj))))
+             ;既に関数として存在するとき
+             ((equal? (obj-type search-rst) 'fun)
+              (if (equal? (obj-type newobj) (obj-type search-rst))
+                  (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
+                  (error (format
+                          "~a:~a stx:function-prototype: ~a: different-type-parameter-function is already defined."
+                          (position-line pgpos)
+                          (position-col pgpos)
+                          (obj-name newobj)))))
+             ;既にプロトタイプ宣言として存在するとき
+             ((equal? (obj-type search-rst) 'proto)
+              (if (equal? (obj-type newobj) (obj-type search-rst))
+                  (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
+                  (error (format
+                          "~a:~a stx:function-prototype: ~a: different-type-parameter-prototype is already defined."
+                          (position-line pgpos)
+                          (position-col pgpos)
+                          (obj-name newobj)))))
+             ;既にパラメータとして存在しているとき
+             ((equal? (obj-kind search-rst) 'parm);たぶんここにはこない
+              (error (format
+                      "~a:~a: stx:function-prototype: ~a is already defined as function-param."
+                      (position-line pgpos)
+                      (position-col pgpos)
+                      (obj-name newobj))))
+             (else (error "unknown-obj-kind")))
+           ;既にnameが一致するオブジェクトが存在しないとき→登録
+           (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+             (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-            
-        ;新しいobjが関数定義のとき
-        ((equal? (obj-kind newobj) 'fun)
-         (if search-rst
-            ;既にnameが一致するオブジェクトが存在するとき
-            (cond
-              ((equal? (obj-kind search-rst) 'var)
-               (error "既に変数として宣言されている"))
-              ((equal? (obj-kind search-rst) 'parm)
-               (error "パラメータとして既に宣言されている"));たぶんここにはこない
-              ((equal? (obj-kind search-rst) 'fun)
-               (error "関数の二重定義はエラー"))
-              ((equal? (obj-kind search-rst)  'proto)
-               ;型情報が一致しているかどうかチェック
-               (if (equal? (obj-type newobj) (obj-type search-rst))
+      
+      ;新しいobjが関数定義のとき
+      ((equal? (obj-kind newobj) 'fun)
+       (if search-rst
+           ;既にnameが一致するオブジェクトが存在するとき
+           (cond
+             ((equal? (obj-kind search-rst) 'var)
+              (error (format
+                      "~a:~a: stx:function-definition: ~a is already defined as variable."
+                      (position-line pgpos)
+                      (position-col pgpos)
+                      (obj-name newobj))))
+             ((equal? (obj-kind search-rst) 'parm);たぶんここにはこない
+              (error (format
+                      "~a:~a: stx:function-definition: ~a is already defined as function-param."
+                      (position-line pgpos)
+                      (position-col pgpos)
+                      (obj-name newobj))))
+             ((equal? (obj-kind search-rst) 'fun)
+              (error (format
+                      "~a:~a: stx:function-deinition: ~a is already defined as function. function-definitin is duplicate."
+                      (position-line pgpos)
+                      (position-col pgpos)
+                      (obj-name newobj))))
+             ((equal? (obj-kind search-rst)  'proto)
+              ;型情報が一致しているかどうかチェック
+              (if (equal? (obj-type newobj) (obj-type search-rst))
                   ;登録
                   (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                     (if (null? (cdr env))
-                       (cons newobj `(,top-env))
-                       (cons newobj `(,top-env ,@(cdr env)))))
+                        (cons newobj `(,top-env))
+                        (cons newobj `(,top-env ,@(cdr env)))))
                   ;エラー
-                  (error "プロトタイプ宣言と関数定義で型が違う")))
-              (else (error "unknown obj-kind")))
-            
-            ;既にnameが一致するオブジェクトが存在しないとき→登録
-            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
-              (if (null? (cdr env))
+                  (error (format
+                          "~a:~a: stx:function-definition: ~a: The types of parameters does not match with function-prototype which is already defined."
+                          (position-line pgpos)
+                          (position-col pgpos)
+                          (obj-name newobj)))))
+                          
+             (else (error "unknown obj-kind")))
+           
+           ;既にnameが一致するオブジェクトが存在しないとき→登録
+           (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
+             (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-        (else (error "unknown obj-kind ")))))
-    
-  (add-ref-env-main env newobj))
-        
-(define (env-test mylist)
-  (define (env-test-main env mylist)
-    (if (= 1 (length mylist))
-        `(,(car (add-ref-env env (car mylist))))
-        (begin
-          (set! env (add-new-level-to-env env))
-          (let ((rst (add-ref-env env (car mylist))))
-            `(,(car rst) ,@(env-test-main (cdr rst) (cdr mylist)))))))
-  (env-test-main initial-env mylist))
+      (else (error "unknown obj-kind ")))))
 
 ;新しく環境のリストの先頭にlambda式を追加する
 (define (add-new-level-to-env env)
@@ -405,14 +472,18 @@
       (if (or (equal? 'var (obj-kind tgt-obj-fixed)) (equal? 'parm (obj-kind tgt-obj-fixed)))
           ;パラメータまたは変数のときはvoidはダメ.
           (if (equal? 'void (type-struct-type obj-type-struct))
-              (error "void型が現れるのは関数の返り値型としてのみです")
+              (begin (eprintf"obj-error : ~a: the type \"void\" is allowed only as function."
+                             (obj-name tgt-obj))
+                     (error ""))
               #t)
           ;プロトタイプ宣言または関数定義のとき,typeがvoidであればポインタでもなく配列でもなければならない
           (if (equal? 'void (type-struct-type obj-type-struct))
               (if (and (equal? #f (type-struct-isarray obj-type-struct))
                        (equal? #f (type-struct-ispointer obj-type-struct)))
                   #t
-                  (error "voidの配列,voidのポインタ型,voidのポインタ型の配列は許可されません!!"))
+                  (begin (eprintf "obj-error : ~a: the type \"void-array\", \"void-pointer\",and  \"void-pointer-array\" is not allowd as function type."
+                                  (obj-name tgt-obj))
+                         (error "")))
               #t))))
 ;obj-typeのリストから型情報の構造体に変換する便利関数
 (define (conv-typelist-to-struct typelist)
@@ -450,31 +521,44 @@
       ;すべてエラーなく通過した場合すべて#tを返すので返り値は#tになる
       ((list? ast) (if (= 1 (length ast)) (type-check-main (car ast)) (and (type-check-main (car ast) ) (type-check-main (cdr ast)))))
       ;stx:declaration
-      ;declistの中のobjがすべて正しいか調べる
-      ((stx:declaration? ast) (type-check-main (stx:declaration-declist ast)))
+        ;declistの中のobjがすべて正しいか調べる
+      ((stx:declaration? ast)
+       (with-handlers ((exn:fail? 
+                        (lambda (e) (error (format "~a:~a: stx:declaration"
+                                                   (position-line (stx:declaration-pos ast))
+                                                   (position-col (stx:declaration-pos ast)))))))
+         (type-check-main (stx:declaration-declist ast))
+         (type-check-main (stx:declaration-declist ast))))
       ;stx:func-prototype
       ;プロトタイプ宣言自身のobjとパラメータリストがすべて#tならOK
       ((stx:func-prototype? ast)
-       (if (and
-            (type-check-main (stx:func-prototype-var-decl ast))
-            (type-check-main (stx:func-prototype-declarator ast)))
-           #t
-           #f))
+       (with-handlers ((exn:fail? 
+                             (lambda (e) (error (format "~a:~a: stx:func-prototype"
+                                                        (position-line (stx:func-prototype-pos ast))
+                                                        (position-col (stx:func-prototype-pos ast)))))))
+         (and
+          (type-check-main (stx:func-prototype-var-decl ast))
+          (type-check-main (stx:func-prototype-declarator ast)))
+           #t))
       ;stx:func-definition
       ;関数定義自身のobjとパラメータリストと関数定義の複文本体がすべて#tならOK
       ((stx:func-definition? ast)
-       (if (and
-            (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
-              (begin
-                (set! now-func-type-struct
-                      (conv-typelist-to-struct
-                       (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
-                                   (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
-                rst))
-            (type-check-main (stx:func-definition-declarator ast))
-            (type-check-main (stx:func-definition-statement ast)))
-           #t
-           #f))
+       (with-handlers ((exn:fail? 
+                             (lambda (e) (error (format "~a:~a: stx:func-definition type-check-error"
+                                                        (position-line (stx:func-definition-pos ast))
+                                                        (position-col (stx:func-definition-pos ast)))))))
+       (and
+        (let ((rst (type-check-main (stx:func-definition-var-decl ast)))) ;関数定義自身のobjがwell-typedがチェック.結果をrstにいれる
+          (begin
+            (set! now-func-type-struct
+                  (conv-typelist-to-struct
+                   (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
+                               (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
+            rst))
+        (type-check-main (stx:func-definition-declarator ast))
+        (type-check-main (stx:func-definition-statement ast)))
+         #t))
+         
       
       ;stx:compound-stmt
       ((stx:compound-stmt? ast)
@@ -495,7 +579,9 @@
                #t
                #f)
            ;testの型がintでなければエラー
-           (error "while文またはfor文のテストの式の型はintでなければなりません.")))
+           (error (format "~a:~a: stx:while-stmt: the type of while-test or for-test must be int"
+                          (position-line (stx:while-stmt-pos ast))
+                          (position-col (stx:while-stmt-pos ast))))))
       
       ;stx:if-else-stmt
       ((stx:if-else-stmt? ast)
@@ -508,7 +594,9 @@
                #t
                #f)
            ;testの型がintでなければエラー
-           (error "if文のテストの式の型はintでなければなりません.")))
+           (error (format "~a:~a: stx:if-else-stmt the type of if-test must be int"
+                          (position-line (stx:if-else-stmt-pos ast))
+                          (position-col (stx:if-else-stmt-pos ast))))))
       ;stx:return-stmt
       ;現在いる関数の型と一致しなければエラー
       ((stx:return-stmt? ast)
@@ -516,13 +604,19 @@
            ;void型のときはnullでなければエラー
            (if (null? (stx:return-stmt-var ast))
                #t
-               (error "void型関数内のreturn文はnullでなければなりません"))
+               (error (format "~a:~a: stx:return-stmt: the function whose type is void must not have return-val.")
+                      (position-line (stx:return-stmt-pos ast))
+                      (position-col (stx:return-stmt-pos ast))))
            ;他の型のときは型が一致していればOK
            (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
                #t
-               (begin (display now-func-type-struct) (display (type-check-exp (stx:return-stmt-var ast))) (error "return文の型の整合性がとれていません,")))))
+               (error (format
+                       "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
+                       (position-line (stx:return-stmt-pos ast))
+                       (position-col (stx:return-stmt-pos ast)))))))
       
-      (else (begin (display ast) (error "stmt 木の巡回エラー")))))
+      (else (begin (display ast) (error "tree-walk-error:type-check")))))
+  
   
   (display (type-check-main ast)))
 
@@ -545,9 +639,12 @@
     ;stx:funccall-exp
     ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
     ((stx:funccall-exp? exp)
-     (let ((search-rst (search-func-by-name (stx:funccall-exp-tgt exp))))
+     (let ((search-rst (search-func-by-name (obj-name (stx:funccall-exp-tgt exp)))))
        (if (equal? #f search-rst)
-           (begin  (error "error: funccall-exp: call undefined function"))
+           (error (format "~a:~a stx:funccall-exp: call undefined function \"~a\""
+                                  (position-line (stx:funccall-exp-pos exp))
+                                  (position-col (stx:funccall-exp-pos exp))
+                                  (stx:funccall-exp-tgt exp)))
            (let ((funccall-exptypelist  ;関数呼び出しで使用されている式の型リスト
                   (if (null? (stx:funccall-exp-paramlist exp))
                       `()
@@ -566,9 +663,13 @@
                      ;関数呼び出しでの引数の型と関数定義された引数の型が全て等しいのでOK.かえす型は関数自体の型.search-rstの2個目の要素
                      (conv-typelist-to-struct (cadr search-rst))
                      ;エラー
-                     (error "関数呼び出しにおいて定義された引数の型と実際に呼び出しに使われた引数の型が一致しない"))
+                     (error (format "~a:~a: stx:funccall-exp: the type-list of funccall-parmlist doesn't match with the type-list of function-definition"
+                             (position-line (stx:funccall-exp-pos exp))
+                             (position-col (stx:funccall-exp-pos exp)))))
                  ;引数の個数が一致しなかった
-                 (error "関数呼び出しにおいて定義された引数の個数と実際に呼び出しに使われた引数の個数が一致しない"))))))
+                 (error (format "~a:~a: stx:funccall-exp: the number of type-lists of funccall-parmlist doesn't match with the number of type-lists of function-definition"
+                             (position-line (stx:funccall-exp-pos exp))
+                             (position-col (stx:funccall-exp-pos exp)))))))))
     ;stx:aop-exp
     ((stx:aop-exp? exp)
      (let
@@ -589,7 +690,9 @@
                  (and (isint-pointerpointer right-type) (isint left-type)))
              (type-struct 'int #f #t #t))
             ;エラー
-            (else (error "+演算において型違反"))))
+            (else (error (format "~a:~a: stx:aop-exp: the type of operand of \"+\" operation is incorrect."
+                             (position-line (stx:aop-exp-pos exp))
+                             (position-col (stx:aop-exp-pos exp)))))))
          ;-演算
          ((equal? '- (stx:aop-exp-op exp))
           (cond
@@ -600,17 +703,23 @@
             ;int** - int
             ((and (isint-pointerpointer left-type) (isint right-type)) (type-struct 'int #f #t #t))
             ;エラー
-            (else (error "-演算において型違反"))))
+            (else (error (format "~a:~a: stx:aop-exp: the type of operand of \"-\" operation is incorrect."
+                             (position-line (stx:aop-exp-pos exp))
+                             (position-col (stx:aop-exp-pos exp)))))))
          ;*演算
          ((equal? '* (stx:aop-exp-op exp))
           (if (and (isint left-type) (isint right-type))
               (type-struct 'int #f #f #f)
-              (error "*演算において型違反")))
+              (error (format "~a:~a: stx:aop-exp: the type of operand of \"*\" operation is incorrect."
+                             (position-line (stx:aop-exp-pos exp))
+                             (position-col (stx:aop-exp-pos exp))))))
          ;/演算
          ((equal? '/ (stx:aop-exp-op exp))
           (if (and (isint left-type) (isint right-type))
               (type-struct 'int #f #f #f)
-              (error "/演算において型違反")))
+              (error (format "~a:~a: stx:aop-exp: the type of operand of \"/\" operation is incorrect."
+                             (position-line (stx:aop-exp-pos exp))
+                             (position-col (stx:aop-exp-pos exp))))))
          (else (error "unknown operand")))))
     ;stx;rop-exp
     ((stx:rop-exp? exp)
@@ -618,17 +727,23 @@
            (right-type (type-check-exp (stx:rop-exp-right exp))))
        (if (isequal-type left-type right-type)
            (type-struct 'int #f #f #f)
-           (begin (display left-type) (display right-type) (error "比較演算の左辺と右辺には同じ型がこないといけない!")))))
+           (error (format "~a:~a: stx:rop-exp: the types of left-operand and right-operand must be same."
+                             (position-line (stx:rop-exp-pos exp))
+                             (position-col (stx:rop-exp-pos exp)))))))
     ;stx:logical-and-or-exp
     ((stx:logical-and-or-expr? exp)
      (if (and (isint (type-check-exp (stx:logical-and-or-expr-log1 exp))) (isint (type-check-exp (stx:logical-and-or-expr-log2 exp))))
          (type-struct 'int #f #f #f)
-         (error "&&または||の右辺と左辺にはint型のみOK")))
+         (error (format "~a:~a: stx:logical-and-or-exp: the type of operand of \"&&\" or \"||\" expression is incorrect."
+                             (position-line (stx:logical-and-or-expr-pos exp))
+                             (position-col (stx:logical-and-or-expr-pos exp))))))
     ;stx:addr-exp &
     ((stx:addr-exp? exp)
      (if (isint (type-check-exp (stx:addr-exp-var exp)))
          (type-struct 'int #f #t #f)
-         (error "addr-exp &の後ろはint型のみOK")))
+         (error (format "~a:~a: stx:addr-exp: the type of operand of addr-exp must be int"
+                             (position-line (stx:addr-exp-pos exp))
+                             (position-col (stx:addr-exp-pos exp))))))
     ;stx:deref-exp *
     ((stx:deref-exp? exp)
      ;*e eがint*ならintつける
@@ -638,30 +753,26 @@
        ;*e eがint**ならint*つける
        ((isint-pointerpointer (type-check-exp (stx:deref-exp-arg exp)))
         (type-struct 'int #f #t #f))
-       (else (begin 
-               (display (stx:deref-exp-arg exp))
-               (newline)
-               (display (type-check-exp (stx:deref-exp-arg exp)))
-               (newline)
-               (error "deref-expで型違反")))))
+       (else (error (format "~a:~a: stx:deref-exp: the type of operand of deref-exp is incorrect."
+                             (position-line (stx:deref-exp-pos exp))
+                             (position-col (stx:deref-exp-pos exp)))))))
     ;stx:lit-exp
     ((stx:lit-exp? exp) (type-struct 'int #f #f #f))
     ;obj
-    ((obj? exp)
-     (let ((conv-rst (conv-typelist-to-struct (obj-type exp))))
-       ;(if (equal? #t (type-struct-isarray conv-rst))
-       ;変数参照式なので intならint*に, int*ならint**にする
-       ;  (cond
-       ;   ((isint conv-rst) (type-struct 'int #t #t #f))
-       ;  ((isint-pointer conv-rst) (type-struct 'int #t #t #t))
-       ; (else "変数参照で配列、要素がintかint*以外になっている"))
-       ;そのままかえす
-       conv-rst));)
-    (else (begin (display exp) (error "exp 木の巡回エラー")))))
+    ((obj? exp) (begin (obj-check exp) (conv-typelist-to-struct (obj-type exp))))
+    (else (begin (display exp) (error "tree-walk-error:type-check-exp")))))
 ;意味解析のメイン関数 抽象構文木をうけとり,オブジェクト情報の収集をしてオブジェクト情報を埋め込んだ抽象構文木をかえす。.
 ;同時に,二重定義や未定義変数,関数の使用してないかのチェックと型検査を行う.
-(define (semantic-analysis ast)
+(define (semantic-analysis-ast ast)
   (let ((object-collected-ast (collect-object ast)))
     (begin
       (type-check object-collected-ast)
       object-collected-ast)))
+
+(define (semantic-analysis-file filename)
+  (let* ((ast (parser:parse-file filename))
+         (object-collected-ast (collect-object ast)))
+    (begin
+      (type-check object-collected-ast)
+      object-collected-ast)))
+                                
