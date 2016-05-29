@@ -6,7 +6,7 @@
   (prefix-in parser: "parser.rkt")
   (prefix-in stx:    "parser-syntax.rkt"))
 ;オブジェクト情報をもつ構造体
-(struct obj (name lev kind type) #:transparent)
+(struct obj (name lev kind type ofs) #:transparent)
 ;kind = var parm fun proto 
 (define fun 'fun)
 (define var 'var)
@@ -49,7 +49,7 @@
   
   ;var-declからlev,kindを指定したobj構造体をかえす
   (define (var-decl-toobj decl lev kind)
-    (obj (stx:var-decl-id decl) lev kind (var-decl-totype decl)))
+    (obj (stx:var-decl-id decl) lev kind (var-decl-totype decl) 0))
   
   ;メイン部分
   (define (collect-object-main ast lev)
@@ -77,7 +77,7 @@
                    (map (lambda (x) (obj-type x)) proto-declarator-objlist)))
               (proto-obj  ;protoのobj構造体.typeに引数の型情報が必要なので追加.具体的にはprotoのobj構造体のtypeに引数のtypeリストをappendする.
                (let ((fp-obj (var-decl-toobj (stx:func-prototype-var-decl ast) lev proto)))
-                 (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist)))))
+                 (obj (obj-name fp-obj) (obj-lev fp-obj) (obj-kind fp-obj) (append (list (obj-type fp-obj)) proto-declarator-obj-typelist) 0))))
          ;返り値はここ
          (stx:func-prototype
           (let* ((rst (add-ref-env  obj-env proto-obj (stx:func-prototype-pos ast))));プロトタイプ宣言のobjを環境に追加した結果をrstに入れる
@@ -106,7 +106,7 @@
                    (map (lambda (x) (obj-type x)) fun-declarator-objlist)))
               (def-obj　　　　　　　　　　　　　　　　　　　;funのobj構造体.typeに引数の型情報が必要なので追加.具体的にはfunのobj構造体のtypeに引数のtypeリストをappendする.
                 (let ((fd-obj (var-decl-toobj (stx:func-definition-var-decl ast) lev fun)))
-                  (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist))))
+                  (obj (obj-name fd-obj) (obj-lev fd-obj) (obj-kind fd-obj) (append (list (obj-type fd-obj)) fun-declarator-obj-typelist) 0)))
               
               
               (func-def-rst
@@ -217,7 +217,7 @@
       ;stx:var-exp
       ;環境からnameが一致するものを探す
       ((stx:var-exp? ast)
-       (let* ((dummy-obj (obj (stx:var-exp-tgt ast) 0 var `())) ;seach-envはobj構造体との一致を調べるので検索用にvar-expをobj構造体に変換 name以外のメンバはダミー
+       (let* ((dummy-obj (obj (stx:var-exp-tgt ast) 0 var `() 0)) ;seach-envはobj構造体との一致を調べるので検索用にvar-expをobj構造体に変換 name以外のメンバはダミー
               (search-rst (search-env-by-obj-name obj-env dummy-obj)))         ;環境から検索
          (if search-rst                                                                
              (if (or (equal? var (obj-kind search-rst)) (equal? parm (obj-kind search-rst))) ;見つかった場合,varかparmとして宣言されているか確認
@@ -236,7 +236,7 @@
       ((stx:funccall-exp? ast)
        (stx:funccall-exp
         ;stx:funccall-exp-tgt
-        (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 fun `())) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
+        (let* ((dummy-obj (obj (stx:funccall-exp-tgt ast) 0 fun `() 0)) ;seach-envはobj構造体との一致を調べるので検索用にobj構造体をつくる name以外のメンバはダミー
                (search-rst (search-env-by-obj-name obj-env dummy-obj)))
           (if search-rst
               (if (or (equal? fun (obj-kind search-rst)) (equal? proto (obj-kind search-rst)))  ;見つかった場合,funまたはprotoとして宣言されているか確認
@@ -316,7 +316,7 @@
                                      (position-col pgpos)
                                      (obj-name newobj))
                             #f))
-                    (else (begin (display search-rst) (error "unknown obj-kind"))))))
+                    (else (begin (display search-rst) (error "unknown obj-kind1"))))))
              (if error-flg
                  (error "ここにはこない")
                  (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
@@ -385,7 +385,7 @@
                       (position-line pgpos)
                       (position-col pgpos)
                       (obj-name newobj))))
-             (else (error "unknown-obj-kind")))
+             (else (error "unknown-obj-kind2")))
            ;既にnameが一致するオブジェクトが存在しないとき→登録
            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
              (if (null? (cdr env))
@@ -430,14 +430,14 @@
                           (position-col pgpos)
                           (obj-name newobj)))))
                           
-             (else (error "unknown obj-kind")))
+             (else (error "unknown obj-kind3")))
            
            ;既にnameが一致するオブジェクトが存在しないとき→登録
            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
              (if (null? (cdr env))
                  (cons newobj `(,top-env))
                  (cons newobj `(,top-env ,@(cdr env)))))))
-      (else (error "unknown obj-kind ")))))
+      (else (error "unknown obj-kind4")))))
 
 ;新しく環境のリストの先頭にlambda式を追加する
 (define (add-new-level-to-env env)
@@ -468,7 +468,7 @@
   (define (obj-check tgt-obj)
     (let* ((tgt-obj-fixed ;obj-kindがfunまたはprotoのときは,typeに引数情報を含んでいるので,carで一番はじめのをとりだす
             (if (or (equal? fun (obj-kind tgt-obj)) (equal? proto (obj-kind tgt-obj)))
-                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))
+                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)) 0)
                 tgt-obj))
            (obj-type-struct (conv-typelist-to-struct (obj-type tgt-obj-fixed)))) 
            ;(hoge (display obj-type-struct));for debug
@@ -544,7 +544,7 @@
              (set! now-func-type-struct
                    (conv-typelist-to-struct
                     (obj-type (let ((tgt-obj (stx:func-definition-var-decl ast)))
-                                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)))))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
+                                (obj (obj-name tgt-obj) (obj-lev tgt-obj) (obj-kind tgt-obj) (car (obj-type tgt-obj)) 0)))))　;現在の関数の型をnow-func-type-structに入れる.return文でいまの関数の型を調べるため.
              rst))
          (type-check-main (stx:func-definition-declarator ast))
          (type-check-main (stx:func-definition-statement ast))

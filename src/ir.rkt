@@ -29,7 +29,7 @@
 (define (fresh-tmpvar)
   (let ([old-tmpvar-num now-tmpvar-num])
     (set! now-tmpvar-num (+ 1 now-tmpvar-num))
-         (semantic:obj (string->symbol (string-append "t" (number->string old-tmpvar-num))) 0 0 'tmp)))
+         (semantic:obj (string->symbol (string-append "t" (number->string old-tmpvar-num))) 0 0 'tmp 0)))
 
 ;抽象構文木を中間表現に変換する関数.
 ;appendしていくのでast->irはかならずlistをかえすようにする
