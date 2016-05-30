@@ -10,10 +10,15 @@
 ;現時点でのアドレスのサイズを示す
 (define now-addr-size 0)
 ;呼び出すごとに新しいの位置(4刻み)
-(define (fresh-addr)
+(define (fresh-addr-normal)
   (let ([old-addr-size now-addr-size])
     (set! now-addr-size (- now-addr-size 4))
     old-addr-size))
+
+(define (fresh-addr-array num)
+  (let ([old-addr-size now-addr-size])
+    (set! now-addr-size (- now-addr-size (* 4 num)))
+    (+ 4 now-addr-size)))
 ;offset用の環境
 (define initial-env (list (lambda (x) #f)))
 (define obj-env initial-env)
@@ -64,7 +69,14 @@
                  (if (and (equal? 0 (semantic:obj-lev (ir-stx:var-decl-var ir-ast)))
                           (not (equal? 'tmp (semantic:obj-type (ir-stx:var-decl-var ir-ast)))))
                      (ir-stx:var-decl-var ir-ast) ;level0は大域なのでofsはそのまま
-                     (set-offset-to-obj (ir-stx:var-decl-var ir-ast) (fresh-addr))))
+                     ;ofsを割り当てる
+                     (if (and (not (equal? 'tmp (semantic:obj-type (ir-stx:var-decl-var ir-ast))))
+                              (equal? 'array (car (semantic:obj-type (ir-stx:var-decl-var ir-ast)))))
+                         ;配列のときはfresh-addr-array
+                         (let ((arraynum (car (reverse (semantic:obj-type (ir-stx:var-decl-var ir-ast))))))
+                           (set-offset-to-obj (ir-stx:var-decl-var ir-ast) (fresh-addr-array arraynum)))
+                         ;それ以外はfresh-addr-normal
+                         (set-offset-to-obj (ir-stx:var-decl-var ir-ast) (fresh-addr-normal)))))
                (rst (add-obj-to-env obj-env tgt-obj)))
           (begin
             (set! obj-env (cdr rst))
@@ -147,6 +159,4 @@
       ((ir-stx:addr-exp? ir-ast)
        (ir-stx:addr-exp (assign-addr-main (ir-stx:addr-exp-var ir-ast))))
       (else ir-ast)))
-          
-  
   (begin (initial-addr-parm) (assign-addr-main ir-ast)))
