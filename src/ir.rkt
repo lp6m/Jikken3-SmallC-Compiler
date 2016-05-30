@@ -1,4 +1,5 @@
 #lang racket
+(provide (all-defined-out))
 (require (prefix-in parser: "parser.rkt")
         (prefix-in semantic: "semantic.rkt")
         (prefix-in stx: "parser-syntax.rkt")
@@ -136,7 +137,7 @@
          (let ((t0 (fresh-tmpvar)))
            `(,(ir-stx:cmpd-stmt
              ;cmpd-stmt-decls
-             (list t0)
+             (list (ir-stx:var-decl t0))
              ;cmpd-stmt-stmts
              `(,@(exp->ir t0 (car (stx:funccall-exp-paramlist exp)))
                ,(ir-stx:print-stmt t0)))))
