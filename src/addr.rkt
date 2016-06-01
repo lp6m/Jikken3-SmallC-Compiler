@@ -1,4 +1,5 @@
 #lang racket
+(provide (all-defined-out))
 (require (prefix-in parser: "parser.rkt")
          (prefix-in semantic: "semantic.rkt")
          (prefix-in stx: "parser-syntax.rkt")
@@ -6,7 +7,10 @@
          (prefix-in ir: "ir.rkt"))
 ;offsetの値0に戻す
 (define (reset-addr-parm)
+  (set! min-addr-size 0)
   (set! now-addr-size 0))
+;関数でのアドレス(負の値)の最小値を保存
+(define min-addr-size 0)
 ;現時点でのアドレスのサイズを示す
 (define now-addr-size 0)
 ;呼び出すごとに新しいの位置(4刻み)
@@ -24,10 +28,12 @@
 (define obj-env initial-env)
 ;objをaddしてobjと環境のconsセルかえす
 (define (add-obj-to-env env obj)
-  (let ((top-env (lambda (x) (if (equal? (semantic:obj-name obj) (semantic:obj-name x)) obj ((car env) x)))))
-    (if (null? (cdr env))
-        (cons obj `(,top-env))
-        (cons obj `(,top-env ,@(cdr env))))))
+  (begin
+    (set! min-addr-size (min min-addr-size (semantic:obj-ofs obj)))
+    (let ((top-env (lambda (x) (if (equal? (semantic:obj-name obj) (semantic:obj-name x)) obj ((car env) x)))))
+      (if (null? (cdr env))
+          (cons obj `(,top-env))
+          (cons obj `(,top-env ,@(cdr env)))))))
      
 ;obj-envに新しいレベルの環境を足す
 (define (add-newlevel-to-env env)
@@ -86,26 +92,34 @@
       ((ir-stx:fun-def? ir-ast)
        (begin
          (reset-addr-parm)
-         (ir-stx:fun-def
-          ;ir-stx:fun-def-var
-          (ir-stx:fun-def-var ir-ast)
-          ;ir-stx:fun-def-parms 4個目までは無視 5個目からは4,8,12,...
-          (let ((params
-                 (if (<= (length (ir-stx:fun-def-parms ir-ast)) 4)
-                     (ir-stx:fun-def-parms ir-ast)
-                     (let ((parmindex 0))
-                       (map (lambda (x) 
-                              (ir-stx:var-decl (set-offset-to-obj (ir-stx:var-decl-var x)
-                                                                  (begin
-                                                                    (set! parmindex (+ 1 parmindex))
-                                                                    (if (<= parmindex 4)
-                                                                        0
-                                                                        (* 4 (- parmindex 4)))))))
-                            (ir-stx:fun-def-parms ir-ast))))))
-            (for-each (lambda (x) (let ((rst (add-obj-to-env obj-env (ir-stx:var-decl-var x)))) (set! obj-env (cdr rst)) (ir-stx:var-decl (car rst)))) params)
-            params)
-          ;ir-stx:fun-def-body
-          (assign-addr-main (ir-stx:fun-def-body ir-ast)))))
+         (let ((fun-def-rst
+                (ir-stx:fun-def
+                 ;ir-stx:fun-def-var
+                 (ir-stx:fun-def-var ir-ast)
+                 ;ir-stx:fun-def-parms 4個目までは無視 5個目からは4,8,12,...
+                 (let ((params
+                        (if (<= (length (ir-stx:fun-def-parms ir-ast)) 4)
+                            (ir-stx:fun-def-parms ir-ast)
+                            (let ((parmindex 0))
+                              (map (lambda (x) 
+                                     (ir-stx:var-decl (set-offset-to-obj (ir-stx:var-decl-var x)
+                                                                         (begin
+                                                                           (set! parmindex (+ 1 parmindex))
+                                                                           (if (<= parmindex 4)
+                                                                               0
+                                                                               (* 4 (- parmindex 4)))))))
+                                   (ir-stx:fun-def-parms ir-ast))))))
+                   ;bodyで引数をいじる時はコピーしたメモリ位置にする
+                   (for-each (lambda (x) (let ((rst (add-obj-to-env obj-env (ir-stx:var-decl-var x)))) (begin (set! obj-env (cdr rst)) (ir-stx:var-decl (car rst)))))
+                             (map (lambda (x) (ir-stx:var-decl (set-offset-to-obj (ir-stx:var-decl-var x) (fresh-addr-normal)))) params))
+                   params)
+                 ;ir-stx:fun-def-body
+                 (assign-addr-main (ir-stx:fun-def-body ir-ast)))))
+           ;fun-def-varのofsにローカルメモリの最小値入れる
+           (ir-stx:fun-def
+            (set-offset-to-obj (ir-stx:fun-def-var fun-def-rst) min-addr-size)
+            (ir-stx:fun-def-parms fun-def-rst)
+            (ir-stx:fun-def-body fun-def-rst)))))
       ((ir-stx:cmpd-stmt? ir-ast)
        (let ((old-addr now-addr-size)
                (rst (ir-stx:cmpd-stmt
@@ -149,13 +163,13 @@
            
       ((ir-stx:lit-exp? ir-ast) ir-ast)
       ((ir-stx:aop-exp? ir-ast)
-       (ir-stx:aop-exp-op ir-ast)
-       (assign-addr-main (ir-stx:aop-exp-left ir-ast))
-       (assign-addr-main (ir-stx:aop-exp-right ir-ast)))
+       (ir-stx:aop-exp (ir-stx:aop-exp-op ir-ast)
+                       (assign-addr-main (ir-stx:aop-exp-left ir-ast))
+                       (assign-addr-main (ir-stx:aop-exp-right ir-ast))))
       ((ir-stx:rop-exp? ir-ast)
-       (ir-stx:rop-exp-op ir-ast)
-       (assign-addr-main (ir-stx:rop-exp-left ir-ast))
-       (assign-addr-main (ir-stx:rop-exp-right ir-ast)))
+       (ir-stx:rop-exp (ir-stx:rop-exp-op ir-ast)
+                       (assign-addr-main (ir-stx:rop-exp-left ir-ast))
+                       (assign-addr-main (ir-stx:rop-exp-right ir-ast))))
       ((ir-stx:addr-exp? ir-ast)
        (ir-stx:addr-exp (assign-addr-main (ir-stx:addr-exp-var ir-ast))))
       (else ir-ast)))

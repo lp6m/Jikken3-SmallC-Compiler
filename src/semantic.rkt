@@ -281,7 +281,7 @@
 ;環境からobjを参照し,なければ環境の先頭にobjを追加
 (define (add-ref-env env newobj pgpos) 
   ;newobjとnameが一致するobjを環境から検索
-  (let* ((search-rst (search-env-by-obj-name env newobj))); (hoge (display search-rst)))
+  (let* ((search-rst (search-env-by-obj-name env newobj)))
     ;環境に新しく追加するオブジェクトの種類によって変更
     (cond
       ;新しいobjが変数宣言のとき
@@ -609,7 +609,7 @@
       (else (begin (display ast) (error "tree-walk-error:type-check")))))
   
   
-  (display (type-check-main ast)))
+  (type-check-main ast))
 
 ;式の型検査をする関数.返り値はtype-struct構造体を用いる.
 (define (type-check-exp exp)
@@ -631,7 +631,6 @@
            (if (isequal-type left-type right-type)
                left-type
                (error (format "the left operand type and the right operand type of assign-statement be same."))))))
-           ;(begin (display (stx:assign-stmt-var exp)) (newline) (display left-type) (newline) (display (stx:assign-stmt-src exp)) (newline) (display right-type) (error "代入式の左辺と右辺は同じ型である必要があります")))))
     ;stx:funccall-exp
     ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
     ((stx:funccall-exp? exp)

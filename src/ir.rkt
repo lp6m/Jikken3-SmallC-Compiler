@@ -173,8 +173,18 @@
                  (else (set! type-rst 0)))
                ;type-rstに基づいて構文木の書き換えを行う/行わない
                (cond
-                 ((= type-rst 1) (set! left-ast (stx:aop-exp '* (stx:lit-exp 4 `()) left-ast `())))
-                 ((= type-rst 2) (set! right-ast (stx:aop-exp '* (stx:lit-exp 4 `()) right-ast `()))))
+                 ((= type-rst 1) 
+                  (cond 
+                    ((stx:lit-exp? left-ast) (set! left-ast (stx:lit-exp (* 4 (stx:lit-exp-val left-ast)) `())))
+                    ((and (stx:expression? left-ast) (equal? 1 (length (stx:expression-explist left-ast))) (stx:lit-exp? (car (stx:expression-explist left-ast))))
+                     (set! left-ast (stx:lit-exp (* 4 (stx:lit-exp-val (car (stx:expression-explist left-ast)))) `())))
+                    (else (set! left-ast (stx:aop-exp '* (stx:lit-exp 4 `()) right-ast `())))))
+                 ((= type-rst 2)
+                  (cond 
+                    ((stx:lit-exp? right-ast) (set! right-ast (stx:lit-exp (* 4 (stx:lit-exp-val right-ast)) `())))
+                    ((and (stx:expression? right-ast) (equal? 1 (length (stx:expression-explist right-ast))) (stx:lit-exp? (car (stx:expression-explist right-ast))))
+                     (set! right-ast (stx:lit-exp (* 4 (stx:lit-exp-val (car (stx:expression-explist right-ast)))) `())))
+                    (else (set! right-ast (stx:aop-exp '* (stx:lit-exp 4 `()) right-ast `()))))))
                ;返り値
                `(,@(exp->ir t0 left-ast)  ;t0 = left
                  ,@(exp->ir t1 right-ast) ;t1 = right
@@ -248,7 +258,7 @@
                 (list (ir-stx:var-decl t0))
                 ;cmpd-stmt-stmts
                 `(,@(exp->ir t0 (stx:addr-exp-var exp))
-                  ,(ir-stx:assign-stmt dest (ir-stx:addr-exp-var t0)))))))))
+                  ,(ir-stx:assign-stmt dest (ir-stx:addr-exp t0)))))))))
          
     ((stx:logical-and-or-expr? exp)
      (cond
@@ -347,14 +357,21 @@
        (display (ir-stx:label-stmt-name (ir-stx:goto-stmt-label ir)))
        (newline)))
     ((ir-stx:call-stmt? ir)
-     (begin
-       (display (semantic:obj-name (ir-stx:call-stmt-dest ir)))
-       (display " = ")
-       (display (semantic:obj-name (ir-stx:call-stmt-tgt ir)))
-       (display "(")
-       (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display ","))) (ir-stx:call-stmt-vars ir))
-       (display ")")
-       (newline)))
+     (if (null? (ir-stx:call-stmt-dest ir))
+         (begin
+           (display (semantic:obj-name (ir-stx:call-stmt-tgt ir)))
+           (display "(")
+           (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display ","))) (ir-stx:call-stmt-vars ir))
+           (display ")")
+           (newline))
+         (begin
+           (display (semantic:obj-name (ir-stx:call-stmt-dest ir)))
+           (display " = ")
+           (display (semantic:obj-name (ir-stx:call-stmt-tgt ir)))
+           (display "(")
+           (for-each (lambda (x) (begin (display (semantic:obj-name x)) (display ","))) (ir-stx:call-stmt-vars ir))
+           (display ")")
+           (newline))))
     ((ir-stx:ret-stmt? ir)
      (begin
        (display "return ")
