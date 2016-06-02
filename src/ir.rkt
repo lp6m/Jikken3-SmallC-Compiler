@@ -148,7 +148,10 @@
                (map (lambda (x) (ir-stx:var-decl x)) tlist)
                ;cmpd-stmt-stmts
                `(,@(list-nest-append (map (lambda (x y) (exp->ir x y)) tlist (stx:funccall-exp-paramlist exp)))
-                 ,(ir-stx:call-stmt dest (stx:funccall-exp-tgt exp) tlist)))))))
+                 ,(if (equal? 'void (caar (semantic:obj-type (stx:funccall-exp-tgt exp))))
+                      ;void
+                      (ir-stx:call-stmt `() (stx:funccall-exp-tgt exp) tlist)
+                      (ir-stx:call-stmt dest (stx:funccall-exp-tgt exp) tlist))))))))
     ((stx:aop-exp? exp)
      (let ((t0 (fresh-tmpvar)) (t1 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt

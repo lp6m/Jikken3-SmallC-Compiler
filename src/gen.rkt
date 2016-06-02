@@ -237,18 +237,8 @@
 ;; header of executable code
 (define asm-header `(,(emit .data)
                      ,(emit-label "newline")
-                     ,(emit .asciiz "\"\\n\"")
-                     ,(emit .text)
-                      ,(emit .globl "main")))
-                      
-
-;; footer of executable code
-;(define asm-footer
-;  `(,(emit lw ($ fp) (-> ($ sp) 0))
-;    ,(emit addiu ($ sp) ($ sp) 24)
-;    ,(emit jr ($ ra))))
-
-
+                     ,(emit .asciiz "\"\\n\"")))
+                     
 ;; stringify assembly code
 
 (define (arg->string arg)
@@ -264,6 +254,7 @@
 (define (instr->string instr)
   (case (first instr)
     ((#:label) (format "~a:" (second instr)))
+    (("gb") (format "~a" (second instr)))
     (else (format "\t~a\t~a"
                   (symbol->string (first instr))
                   (string-join (map arg->string (rest instr))
@@ -295,23 +286,37 @@
               stmts))
 
 (define now-func-stack-size 0)
+(define now-stack-pop-size 0)
+;global変数を探す関数
+(define (gen-stmt-global stmt)
+  (cond ((list? stmt)
+         (ir:list-nest-append (map gen-stmt-global stmt)))
+        ((ir-stx:var-decl? stmt)
+         (let* ((tgt-obj (ir-stx:var-decl-var stmt))
+                (type (semantic:obj-type tgt-obj)))
+           (if (equal? (car type) 'array)
+               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ": .space " (number->string (* 4 (car (reverse type)))))))
+               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ": .word 0" ))))))
+        (else `())))
 ;; stmt -> asm code list
 (define (gen-stmt stmt)
   (cond ((null? stmt) `())
         ((list? stmt) 
          (ir:list-nest-append (map gen-stmt stmt)))
+        ((ir-stx:var-decl? stmt) `())
         ((ir-stx:fun-def? stmt)
          ;fun-def-varのobj構造体のofsにはその関数で使っている変数のofs(負)の最小値が書かれている
          (let* ((variable_size (semantic:obj-ofs (ir-stx:fun-def-var stmt)))
                 (stack_size (- variable_size 8)) ;$fp,$ra退避する分追加
                 (memory_param_num (max 0 (- (length (ir-stx:fun-def-parms stmt)) 4))) ;メモリに入っている($fpより上にある引数の数)
-                (hoge (set! now-func-stack-size stack_size)))
+                (hoge (set! now-func-stack-size stack_size))
+                (fuga (set! now-stack-pop-size (* -1 (- (- stack_size 4) (* 4 memory_param_num ))))))
            `(;header
              ,(emit-label (symbol->string (semantic:obj-name (ir-stx:fun-def-var stmt))))
-             ,(emit addiu ($ sp) ($ sp) (- stack_size 4)) ;$spさげる
+             ,(emit addiu ($ sp) ($ sp) (* -1 now-stack-pop-size)) ;$spさげる
              ,(emit sw ($ fp) (-> ($ sp) 4))              ;$fp退避
              ,(emit sw ($ ra) (-> ($ sp) 0))              ;$ra退避
-             ,(emit addiu ($ fp) ($ sp) (- (* -1 stack_size) (* 4 memory_param_num)));$fp設定
+             ,(emit addiu ($ fp) ($ sp) (* -1 stack_size));$fp設定
              ;関数に引数がある時は引数をメモリに入れる
              ,@(append
                 (let ((paramindex 0))
@@ -319,22 +324,22 @@
                    (map
                     (lambda (x)
                       (begin (let  
-                             ((rst (cond
-                                     ((equal? paramindex 0) `(,(emit sw ($ a0) (-> ($ fp) 0))))
-                                     ((equal? paramindex 1) `(,(emit sw ($ a1) (-> ($ fp) -4))))
-                                     ((equal? paramindex 2) `(,(emit sw ($ a2) (-> ($ fp) -8))))
-                                     ((equal? paramindex 3) `(,(emit sw ($ a3) (-> ($ fp) -12))))
-                                     (else `(,(emit lw ($ t0) (-> ($ fp) (* 4 (- paramindex 3))))
-                                             ,(emit sw ($ t0) (-> ($ fp) (* -4 paramindex))))))))
-                             (set! paramindex (+ paramindex 1))
-                             rst)))
+                                 ((rst (cond
+                                         ((equal? paramindex 0) `(,(emit sw ($ a0) (-> ($ fp) 0))))
+                                         ((equal? paramindex 1) `(,(emit sw ($ a1) (-> ($ fp) -4))))
+                                         ((equal? paramindex 2) `(,(emit sw ($ a2) (-> ($ fp) -8))))
+                                         ((equal? paramindex 3) `(,(emit sw ($ a3) (-> ($ fp) -12))))
+                                         (else `(,(emit lw ($ t0) (-> ($ fp) (* 4 (- paramindex 3))))
+                                                 ,(emit sw ($ t0) (-> ($ fp) (* -4 paramindex))))))))
+                               (set! paramindex (+ paramindex 1))
+                               rst)))
                     (ir-stx:fun-def-parms stmt))))
-                ;関数本体
-                (gen-stmt (ir-stx:fun-def-body stmt)))
+                  ;関数本体
+                  (gen-stmt (ir-stx:fun-def-body stmt)))
              ;footer
              ,(emit lw ($ fp) (-> ($ sp) 4)) 　　　　　　　        ;fp復元
              ,(emit lw ($ ra) (-> ($ sp) 0))                     ;ra復元
-             ,(emit addiu ($ sp) ($ sp) (* -1 (- stack_size 4))) ;spをpop
+             ,(emit addiu ($ sp) ($ sp) now-stack-pop-size) ;spをpop
              ,(emit jr ($ ra)))))                                ;呼び出し元に戻る
         ((ir-stx:assign-stmt? stmt)
          (let ((dest (ir-stx:assign-stmt-var stmt)))
@@ -379,7 +384,7 @@
           ;fp,ra,sp戻す
           `(,(emit lw ($ fp) (-> ($ sp) 4))                     ;fp復元
             ,(emit lw ($ ra) (-> ($ sp) 0))                     ;ra復元
-            ,(emit addiu ($ sp) ($ sp) (* -1 (- now-func-stack-size 4))) ;spをpop
+            ,(emit addiu ($ sp) ($ sp) now-stack-pop-size) ;spをpop
             ,(emit jr ($ ra)))))                                ;呼び出し元に戻る
         ((ir-stx:call-stmt? stmt)
          ;呼び出し前の準備
@@ -395,7 +400,7 @@
                              ((equal? 2 paramindex) `(,(emit-load-ofs a2 (semantic:obj-ofs x))))
                              ((equal? 3 paramindex) `(,(emit-load-ofs a3 (semantic:obj-ofs x))))
                              (else `(,(emit-load-ofs t0 (semantic:obj-ofs x))
-                                     ,(emit-store-ofs t0 (+ now-func-stack-size (* -4 (- paramindex 3)))))))))
+                                     ,(emit-store-ofs t0 (+ now-func-stack-size (* -4 (- (+ 1 (length (ir-stx:call-stmt-vars stmt))) 4 (- paramindex 3))))))))))
                       (begin
                         (set! paramindex (+ 1 paramindex))
                         rst)))
@@ -415,6 +420,7 @@
 ;; destレジスタにir-stx:expの値を入れる命令リストを返す
 (define (gen-exp dest exp)
   (cond ((ir-stx:var-exp? exp)
+         ;globalの時はla
          ;arrayである時はt0にofsを入れるを返す
          (let ((var (ir-stx:var-exp-var exp)))
            (if (and (not (equal? (semantic:obj-type var) 'tmp))
@@ -452,7 +458,11 @@
 (define (gen-code addr-ir)
   (begin
     (set! now-func-stack-size 0)
+    (set! now-stack-pop-size 0)
     `(,@asm-header
+      ,@(gen-stmt-global addr-ir)
+      ,(emit .text)
+      ,(emit .globl "main")
       ,@(gen-stmts addr-ir))))
 
 (define (test filename)
