@@ -269,11 +269,24 @@
 (define (ofs-addr vofs)
   (-> ($ fp) vofs))
 
+;destレジスタにobjを読み込む命令のリストを返す
+(define (emit-load-obj dest tmp tgt-obj)
+  (if (isglobal tgt-obj)
+      `(,(emit la ($ tmp) (semantic:obj-name tgt-obj))
+        ,(emit lw ($ dest) (-> ($ tmp) 0)))
+      `(,(emit-load-ofs dest (semantic:obj-ofs tgt-obj)))))
+      
 ;; register -> ofs(n) -> code of the form "lw $dest n($fp)"
 ;destレジスタに$fp+vofsの位置のメモリの値を格納する表記を返す
 (define (emit-load-ofs dest vofs)
   (emit lw ($ dest) (ofs-addr vofs)))
 
+;srcレジスタの値をobjに格納するのリスト返す
+(define (emit-store-obj src tmp tgt-obj)
+  (if (isglobal tgt-obj)
+      `(,(emit la ($ tmp) (semantic:obj-name tgt-obj))
+        ,(emit sw ($ src) (-> ($ tmp) 0)))
+      `(,(emit-store-ofs src (semantic:obj-ofs tgt-obj)))))
 ;; register -> ofs(n) -> code of the form "sw $src n($fp)"
 ;;srcレジスタの値をメモリの$fp+vofsの位置に格納する表記を返す
 (define (emit-store-ofs src vofs)
@@ -287,6 +300,15 @@
 
 (define now-func-stack-size 0)
 (define now-stack-pop-size 0)
+;objがグローバルかどうか調べる関数
+(define (isglobal tgt-obj)
+  (let ((type (semantic:obj-type tgt-obj))
+        (lev (semantic:obj-lev tgt-obj)))
+    (if (equal? 'tmp type)
+         #f
+         (if (equal? 0 lev)
+             #t
+             #f))))
 ;global変数を探す関数
 (define (gen-stmt-global stmt)
   (cond ((list? stmt)
@@ -344,32 +366,32 @@
         ((ir-stx:assign-stmt? stmt)
          (let ((dest (ir-stx:assign-stmt-var stmt)))
            `(,@(gen-exp t0 (ir-stx:assign-stmt-exp stmt))
-             ,(emit-store-ofs t0 (semantic:obj-ofs dest)))))
+             ,@(emit-store-obj t0 t1 dest))))
         ((ir-stx:write-stmt? stmt)
          (let ((dest (ir-stx:write-stmt-dest stmt))
-               (src (ir-stx:write-stmt-src stmt)))        
-           `(,(emit-load-ofs t0 (semantic:obj-ofs dest))
-             ,(emit-load-ofs t1 (semantic:obj-ofs src))
+               (src (ir-stx:write-stmt-src stmt)))
+           `(,@(emit-load-obj t0 t1 dest)
+             ,@(emit-load-obj t1 t2 src)
              ,(emit sw ($ t1) (-> ($ t0) 0)))))
-        ((ir-stx:read-stmt? stmt)                           
+        ((ir-stx:read-stmt? stmt)                 ;dest = *src          
          (let ((dest (ir-stx:read-stmt-dest stmt))           
                (src (ir-stx:read-stmt-src stmt)))
-           `(,(emit-load-ofs t0 (semantic:obj-ofs src))
+           `(,@(emit-load-obj t0 t1 src)
              ,(emit lw ($ t0) (-> ($ t0) 0))
-             ,(emit-store-ofs t0 (semantic:obj-ofs dest)))))
+             ,@(emit-store-obj t0 t1 dest))))
         ((ir-stx:label-stmt? stmt)
          (list (emit-label (ir-stx:label-stmt-name stmt))))
         ((ir-stx:if-stmt? stmt)
          (let ((test (ir-stx:if-stmt-var stmt))
                (tlabel (ir-stx:if-stmt-tlabel stmt))
                (elabel (ir-stx:if-stmt-elabel stmt)))
-           `(,(emit-load-ofs t0 (semantic:obj-ofs test))
+           `(,@(emit-load-obj t0 t1 test)
              ,(emit beqz ($ t0) (ir-stx:label-stmt-name elabel))
              ,(emit j (ir-stx:label-stmt-name tlabel)))))
         ((ir-stx:goto-stmt? stmt)
          (list (emit j (ir-stx:label-stmt-name (ir-stx:goto-stmt-label stmt)))))
         ((ir-stx:print-stmt? stmt)
-         `(,(emit-load-ofs a0 (semantic:obj-ofs (ir-stx:print-stmt-var stmt)))
+         `(,@(emit-load-obj a0 t0 (ir-stx:print-stmt-var stmt))
            ,(emit li ($ v0) 1)
            ,(emit syscall)
            ,(emit li ($ v0) 4)
@@ -380,7 +402,7 @@
           ;結果の代入
           (if (null? (ir-stx:ret-stmt-var stmt))
               `()
-              `(,(emit-load-ofs v0 (semantic:obj-ofs (ir-stx:ret-stmt-var stmt)))))
+              (emit-load-obj v0 t0 (ir-stx:ret-stmt-var stmt)))
           ;fp,ra,sp戻す
           `(,(emit lw ($ fp) (-> ($ sp) 4))                     ;fp復元
             ,(emit lw ($ ra) (-> ($ sp) 0))                     ;ra復元
@@ -410,7 +432,7 @@
           ;結果を代入
           (if (null? (ir-stx:call-stmt-dest stmt))
               `()
-              `(,(emit-store-ofs v0 (semantic:obj-ofs (ir-stx:call-stmt-dest stmt)))))))
+              (emit-store-obj v0 t0 (ir-stx:call-stmt-dest stmt)))))
            
         ((ir-stx:cmpd-stmt? stmt)
          (ir:list-nest-append (map gen-stmt (ir-stx:cmpd-stmt-stmts stmt))))
@@ -420,7 +442,8 @@
 ;; destレジスタにir-stx:expの値を入れる命令リストを返す
 (define (gen-exp dest exp)
   (cond ((ir-stx:var-exp? exp)
-         ;globalの時はla
+         ;globalの時はlalw
+         
          ;arrayである時はt0にofsを入れるを返す
          (let ((var (ir-stx:var-exp-var exp)))
            (if (and (not (equal? (semantic:obj-type var) 'tmp))
