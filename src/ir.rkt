@@ -26,11 +26,11 @@
     (ir-stx:label-stmt (string->symbol (string-append "L" (number->string old-symbol-num))))))
 ;現時点での一時用の変数の個数を示す
 (define now-tmpvar-num 0)
-;呼び出すごとに新しい一時用変数(obj構造体）をかえす関数 t0 t1 t2...
+;呼び出すごとに新しい一時用変数(obj構造体）をかえす関数 _x0 _x1 _x2...
 (define (fresh-tmpvar)
   (let ([old-tmpvar-num now-tmpvar-num])
     (set! now-tmpvar-num (+ 1 now-tmpvar-num))
-         (semantic:obj (string->symbol (string-append "t" (number->string old-tmpvar-num))) 0 0 'tmp 0)))
+         (semantic:obj (string->symbol (string-append "_x" (number->string old-tmpvar-num))) 0 0 'tmp 0)))
 
 ;抽象構文木を中間表現に変換する関数.
 ;appendしていくのでast->irはかならずlistをかえすようにする
