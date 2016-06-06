@@ -272,9 +272,9 @@
                    (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
                    ;cmpd-stmt-stmts
                    `(,@(exp->ir t0 (stx:logical-and-or-expr-log1 exp)) ;t0 = log1;
-                      ,@(exp->ir t1 (stx:logical-and-or-expr-log2 exp)) ;t1 = log2;
                       ,(ir-stx:if-stmt t0 L0 L1)                        ;if(t0) then goto L0 else goto L1;
                       ,L0                                               ;label L0;
+                      ,@(exp->ir t1 (stx:logical-and-or-expr-log2 exp)) ;t1 = log2;
                       ,(ir-stx:if-stmt t1 L2 L1)                        ;if(t1) then goto L2 else goto L1;
                       ,L2                                               ;label L2;
                       ,(ir-stx:assign-stmt dest (ir-stx:lit-exp 1))     ;dest = 1;
@@ -290,9 +290,9 @@
                    (list (ir-stx:var-decl t0) (ir-stx:var-decl t1))
                    ;cmpd-stmt-stmts
                    `(,@(exp->ir t0 (stx:logical-and-or-expr-log1 exp)) ;t0 = log1;
-                      ,@(exp->ir t1 (stx:logical-and-or-expr-log2 exp)) ;t1 = log2;
                       ,(ir-stx:if-stmt t0 L1 L0)                        ;if(t0) then goto L1 else goto L0;
                       ,L0                                               ;label L0;
+                      ,@(exp->ir t1 (stx:logical-and-or-expr-log2 exp)) ;t1 = log2;
                       ,(ir-stx:if-stmt t1 L1 L2)                        ;if(t1) then goto L1 else goto L2;
                       ,L2                                               ;label L2;
                       ,(ir-stx:assign-stmt dest (ir-stx:lit-exp 0))     ;t2 = 0;
