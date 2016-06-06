@@ -237,7 +237,8 @@
 ;; header of executable code
 (define asm-header `(,(emit .data)
                      ,(emit-label "newline")
-                     ,(emit .asciiz "\"\\n\"")))
+                     ,(emit .asciiz "\"\\n\"")
+                     ,(emit .align "2")))
                      
 ;; stringify assembly code
 
@@ -317,8 +318,8 @@
          (let* ((tgt-obj (ir-stx:var-decl-var stmt))
                 (type (semantic:obj-type tgt-obj)))
            (if (equal? (car type) 'array)
-               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ": .space " (number->string (* 4 (car (reverse type)))))))
-               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ": .word 0" ))))))
+               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ":\t.space\t" (number->string (* 4 (car (reverse type)))))))
+               `(,(emit "gb" (string-append (symbol->string (semantic:obj-name tgt-obj)) ":\t.word\t0" ))))))
         (else `())))
 ;; stmt -> asm code list
 (define (gen-stmt stmt)
@@ -417,11 +418,11 @@
              (map (lambda (x)
                     (let ((rst
                            (cond
-                             ((equal? 0 paramindex) `(,(emit-load-ofs a0 (semantic:obj-ofs x))))
-                             ((equal? 1 paramindex) `(,(emit-load-ofs a1 (semantic:obj-ofs x))))
-                             ((equal? 2 paramindex) `(,(emit-load-ofs a2 (semantic:obj-ofs x))))
-                             ((equal? 3 paramindex) `(,(emit-load-ofs a3 (semantic:obj-ofs x))))
-                             (else `(,(emit-load-ofs t0 (semantic:obj-ofs x))
+                             ((equal? 0 paramindex) `(,@(emit-load-obj a0 t0 x)))
+                             ((equal? 1 paramindex) `(,@(emit-load-obj a1 t0 x)))
+                             ((equal? 2 paramindex) `(,@(emit-load-obj a2 t0 x)))
+                             ((equal? 3 paramindex) `(,@(emit-load-obj a3 t0 x)))
+                             (else `(,@(emit-load-obj t0 t1 x)
                                      ,(emit-store-ofs t0 (+ now-func-stack-size (* -4 (- (+ 1 (length (ir-stx:call-stmt-vars stmt))) 4 (- paramindex 3))))))))))
                       (begin
                         (set! paramindex (+ 1 paramindex))
@@ -442,19 +443,24 @@
 ;; destレジスタにir-stx:expの値を入れる命令リストを返す
 (define (gen-exp dest exp)
   (cond ((ir-stx:var-exp? exp)
-         ;globalの時はlalw
-         
+         ;globalでarrayのとき globalでarrayでないとき
+         ;globalでなくarrayのとき globalでなくarrayでないとき 
          ;arrayである時はt0にofsを入れるを返す
          (let ((var (ir-stx:var-exp-var exp)))
            (if (and (not (equal? (semantic:obj-type var) 'tmp))
                     (equal? (car (semantic:obj-type var)) 'array))
-               (list (emit addiu ($ t0) ($ fp) (semantic:obj-ofs var)))
-               (list (emit-load-ofs  t0 (semantic:obj-ofs var))))))
+               (if (isglobal var)
+                   ;globalでarrayのとき
+                   (list (emit la ($ dest) (semantic:obj-name var)))
+                   ;globalでなくarrayのとき
+                   (list (emit addiu ($ dest) ($ fp) (semantic:obj-ofs var))))
+               ;arrayでないとき
+               (emit-load-obj dest t1 var))))
         ((ir-stx:lit-exp? exp)
          (list (emit li ($ dest) (ir-stx:lit-exp-val exp))))
         ((ir-stx:aop-exp? exp)
-         `(,(emit-load-ofs t0 (semantic:obj-ofs (ir-stx:aop-exp-left exp)))
-           ,(emit-load-ofs t1 (semantic:obj-ofs (ir-stx:aop-exp-right exp)))
+         `(,@(emit-load-obj t0 t1 (ir-stx:aop-exp-left exp))
+           ,@(emit-load-obj t1 t2 (ir-stx:aop-exp-right exp))
            ,(emit (case (ir-stx:aop-exp-op exp)
                     ((+) add)
                     ((-) sub)
@@ -462,8 +468,8 @@
                     ((/) div))
                   ($ dest) ($ t0) ($ t1))))
         ((ir-stx:rop-exp? exp)
-         `(,(emit-load-ofs t0 (semantic:obj-ofs (ir-stx:rop-exp-left exp)))
-           ,(emit-load-ofs t1 (semantic:obj-ofs (ir-stx:rop-exp-right exp)))
+         `(,@(emit-load-obj t0 t1 (ir-stx:rop-exp-left exp))
+           ,@(emit-load-obj t1 t2 (ir-stx:rop-exp-right exp))
            ,(emit (case (ir-stx:rop-exp-op exp)
                     ((==) seq)
                     ((!=) sne)
@@ -490,3 +496,5 @@
 
 (define (test filename)
   (display (code->string  (gen-code (addr:assign-addr (ir:ir-main filename))))))
+(define (test2 filename outfile)
+  (display (code->string  (gen-code (addr:assign-addr (ir:ir-main filename)))) (open-output-file outfile)))
