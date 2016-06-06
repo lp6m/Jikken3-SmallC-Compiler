@@ -91,6 +91,7 @@
             
       ((ir-stx:fun-def? ir-ast)
        (begin
+         (set! obj-env (add-newlevel-to-env obj-env))
          (reset-addr-parm)
          (let ((fun-def-rst
                 (ir-stx:fun-def
@@ -115,11 +116,13 @@
                    params)
                  ;ir-stx:fun-def-body
                  (assign-addr-main (ir-stx:fun-def-body ir-ast)))))
-           ;fun-def-varのofsにローカルメモリの最小値入れる
-           (ir-stx:fun-def
-            (set-offset-to-obj (ir-stx:fun-def-var fun-def-rst) min-addr-size)
-            (ir-stx:fun-def-parms fun-def-rst)
-            (ir-stx:fun-def-body fun-def-rst)))))
+           (begin
+             (set! obj-env (pop-env obj-env))
+             ;fun-def-varのofsにローカルメモリの最小値入れる
+             (ir-stx:fun-def
+              (set-offset-to-obj (ir-stx:fun-def-var fun-def-rst) min-addr-size)
+              (ir-stx:fun-def-parms fun-def-rst)
+              (ir-stx:fun-def-body fun-def-rst))))))
       ((ir-stx:cmpd-stmt? ir-ast)
        (let ((old-addr now-addr-size)
                (rst (ir-stx:cmpd-stmt
