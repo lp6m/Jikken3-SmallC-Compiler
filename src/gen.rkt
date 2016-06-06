@@ -480,7 +480,11 @@
                   ($ dest) ($ t0) ($ t1))))
         ((ir-stx:addr-exp? exp)
          (let ((src (ir-stx:addr-exp-var exp)))
-           (list (emit addiu ($ t0) ($ fp) (semantic:obj-ofs src)))))
+           (if (isglobal src)
+               ;globalのとき
+               (list (emit la ($ t0) (semantic:obj-name src)))
+               ;それ以外
+               (list (emit addiu ($ t0) ($ fp) (semantic:obj-ofs src))))))
         (else (begin (display exp) (error "compiler internal error.")))))
 
 ;; addr-assigned-ir -> asm code list
