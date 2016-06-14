@@ -125,15 +125,18 @@
               (ir-stx:fun-def-body fun-def-rst))))))
       ((ir-stx:cmpd-stmt? ir-ast)
        (let ((old-addr now-addr-size)
-               (rst (ir-stx:cmpd-stmt
-                     (begin
-                       (set! obj-env (add-newlevel-to-env obj-env))
-                       (assign-addr-main (ir-stx:cmpd-stmt-decls ir-ast)))
-                     (assign-addr-main (ir-stx:cmpd-stmt-stmts ir-ast)))))
-           (begin
-             (set! now-addr-size old-addr)
-             (set! obj-env (pop-env obj-env))
-             rst)))
+               (rst (begin
+                      ;環境に新しいレベルをセット
+                      (set! obj-env (add-newlevel-to-env obj-env))
+                      ;var-declのリストを参照することに環境に変数・一時変数が入る
+                      (assign-addr-main (ir-stx:cmpd-stmt-decls ir-ast))
+                      ;body部もassign-addrする rstはこれ
+                      (assign-addr-main (ir-stx:cmpd-stmt-stmts ir-ast)))))
+         (begin
+           (set! now-addr-size old-addr)
+           (set! obj-env (pop-env obj-env))
+           ;注意.ここでcmpd-stmtが外れる.bodyのリストのみ返す.ここだけリストになっている.最後にfringe関数で展開する.
+           rst)))
       
       ((semantic:obj? ir-ast)
        (if (search-env-by-obj-name obj-env ir-ast)
@@ -176,4 +179,15 @@
       ((ir-stx:addr-exp? ir-ast)
        (ir-stx:addr-exp (assign-addr-main (ir-stx:addr-exp-var ir-ast))))
       (else ir-ast)))
-  (begin (initial-addr-parm) (assign-addr-main ir-ast)))
+  ;リストの入れ子を展開する関数
+  (define (fringe . lis)
+  (reverse (let loop  ((src lis)
+		       (dst '()))
+	     (cond ((null? src) dst)
+		   ((list? (car src))
+		    ;処理対象要素がリストだった場合は、
+		    ;リストだった要素を改めてloopして処理してやる必要がある。
+		    (loop (cdr src) (loop (car src) dst)))
+		   (else
+		    (loop (cdr src) (cons (car src) dst)))))))
+  (begin (initial-addr-parm) (fringe (assign-addr-main ir-ast))))
