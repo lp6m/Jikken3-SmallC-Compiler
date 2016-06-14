@@ -115,7 +115,7 @@
                              (map (lambda (x) (ir-stx:var-decl (set-offset-to-obj (ir-stx:var-decl-var x) (fresh-addr-normal)))) params))
                    params)
                  ;ir-stx:fun-def-body
-                 (assign-addr-main (ir-stx:fun-def-body ir-ast)))))
+                 (fringe (assign-addr-main (ir-stx:fun-def-body ir-ast))))))
            (begin
              (set! obj-env (pop-env obj-env))
              ;fun-def-varのofsにローカルメモリの最小値入れる
@@ -190,4 +190,4 @@
 		    (loop (cdr src) (loop (car src) dst)))
 		   (else
 		    (loop (cdr src) (cons (car src) dst)))))))
-  (begin (initial-addr-parm) (fringe (assign-addr-main ir-ast))))
+  (begin (initial-addr-parm) (assign-addr-main ir-ast)))
