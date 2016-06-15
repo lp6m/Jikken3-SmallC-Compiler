@@ -1,8 +1,9 @@
 ;;;; 制御フローグラフ(control flow graph)
 #lang racket
-(require 
-  (prefix-in ir-stx: "../ir-syntax.rkt")
-  (prefix-in ir: "../ir.rkt"))
+(require (prefix-in ir: "../ir.rkt")
+         (prefix-in addr: "../addr.rkt")
+         (prefix-in ir-stx: "../ir-syntax.rkt")
+         (prefix-in semantic: "../semantic.rkt"))
 (provide (all-defined-out))
 
 ;;;; CFG (control flow graph) は基本ブロックのベクタ
@@ -91,8 +92,8 @@
 
 ;;;; CFG生成
 
-;; ir中の各ラベルを直後の文へくっつける.
-;; くっつけて出来るコンスペア (ラベル集合 . stmt) を以降「ラベル付き文」と呼ぶ.
+;; ir中の各ラベルを直後の文へくっつける．
+;; くっつけて出来るコンスペア (ラベル集合 . stmt) を以降「ラベル付き文」と呼ぶ．
 ;;   stmtリスト -> ラベル付き文のリスト
 (define (coalesce-label ir)
   ((compose1 reverse (lambda (l-ir)
@@ -126,17 +127,19 @@
           '()
           ir)))
 
-;; 基本ブロックの先頭にあたるラベル付き文をleaderと呼ぶ.
+;; 基本ブロックの先頭にあたるラベル付き文をleaderと呼ぶ．
 ;; leader集合を見つけて返す
 ;;   ラベル付き文のリスト -> leader集合
 (define (find-leaders l-ir)
+  ;find-target関数:label-stmtを受け取って,そのラベルが入っている文を返す
   (define (find-target lbl)
     (first (memf (lambda (l-stmt)
-                   (set-member? (car l-stmt) lbl))
+                   (set-member? (car l-stmt) (ir-stx:label-stmt-name lbl)))
                  l-ir)))
+  ;ここからが本体
   (if (null? l-ir)
       '()
-      ((compose1 reverse cdr)           ; for readability
+      ((compose1 reverse cdr)           ;(compose f g x) := f(g(x))
        (foldl
         (lambda (l-stmt acc)
           (let ((stmt (cdr l-stmt))
@@ -145,10 +148,14 @@
             (let ((leaders2 (if is-leader
                                 (set-add leaders l-stmt)
                                 leaders)))
+              ;ここの#t,#fはその文の次がleaderかどうかを表す.よく考えるとわかる.
               (cond ((eq? stmt 'BEGIN) (cons #t leaders2))
                     ((eq? stmt 'END) (cons #f (set-add leaders2 l-stmt)))
-                    ((ir-stx:assign-stmt? stmt)
-                     (cons #f leaders2))
+                    ((ir-stx:assign-stmt? stmt) (cons #f leaders2))
+                    ((ir-stx:write-stmt? stmt) (cons #f leaders2))
+                    ((ir-stx:read-stmt? stmt) (cons #f leaders2))
+                    ((ir-stx:call-stmt? stmt) (cons #f leaders2))
+                    ((ir-stx:print-stmt? stmt) (cons #f leaders2))
                     ((ir-stx:if-stmt? stmt)
                      (cons #t
                            (set-union
@@ -174,7 +181,7 @@
           '() '()))
 
 ;; leader情報をつかってラベル付き文のリストを基本ブロックに分割
-;;   ラベル付き文のリスト,leader集合 -> bblockのリスト
+;;   ラベル付き文のリスト，leader集合 -> bblockのリスト
 (define (split l-ir leaders)
   (reverse
    (map (compose1 make-bblock reverse)
@@ -186,7 +193,7 @@
                '()
                l-ir))))
 
-;; 制御フローに従い,基本ブロック間にエッジを張る
+;; 制御フローに従い，基本ブロック間にエッジを張る
 ;;   bblockのリスト, u-lbls -> エッジの張られたbblockのベクタ(つまりCFG)
 ;;     u-lbls: 実際に使用されたラベルを記録するためのmutable set
 (define (set-edges bbs u-lbls)
@@ -204,8 +211,8 @@
     (define (add-edge i j)
       (add-succ (vector-ref bbv i) j)
       (add-pred (vector-ref bbv j) i))
-    ;; 先頭ラベルにlblを含む基本ブロックを探し,そのインデックスを返す
-    ;; また,見つかれば使用ラベル集合u-lblsにそのラベルを追加
+    ;; 先頭ラベルにlblを含む基本ブロックを探し，そのインデックスを返す
+    ;; また，見つかれば使用ラベル集合u-lblsにそのラベルを追加
     (define (find-target-idx lbl)
       (let ((idx (cdr (assf (lambda (lbls) (set-member? lbls lbl))
                             labels->idx))))
@@ -216,17 +223,17 @@
      (lambda (bb i)
        (let* ((stmts (bblock-stmts bb))
               (last-stmt (vector-ref stmts (- (vector-length stmts) 1))))
-         (cond ;; 基本ブロックの末尾の文で場合分けしながら,適切なエッジを張る
+         (cond ;; 基本ブロックの末尾の文で場合分けしながら，適切なエッジを張る
           ((eq? last-stmt 'BEGIN) (add-edge i (+ i 1)))
           ((eq? last-stmt 'END) (void))
           ((ir-stx:assign-stmt? last-stmt) (add-edge i (+ i 1)))
           ((ir-stx:if-stmt? last-stmt)
-           (let* ((ti (find-target-idx (ir-stx:if-stmt-tlabel last-stmt)))
-                  (ei (find-target-idx (ir-stx:if-stmt-elabel last-stmt))))
+           (let* ((ti (find-target-idx (ir-stx:label-stmt-name (ir-stx:if-stmt-tlabel last-stmt))))
+                  (ei (find-target-idx (ir-stx:label-stmt-name (ir-stx:if-stmt-elabel last-stmt)))))
              (add-edge i ti)
              (add-edge i ei)))
           ((ir-stx:goto-stmt? last-stmt)
-           (let* ((ti (find-target-idx (ir-stx:goto-stmt-label last-stmt))))
+           (let* ((ti (find-target-idx (ir-stx:label-stmt-name (ir-stx:goto-stmt-label last-stmt)))))
              (add-edge i ti)))
           ((ir-stx:ret-stmt? last-stmt) (add-edge i end-idx))
           (else (error "unknown stmt:" last-stmt)))))
@@ -247,12 +254,8 @@
   (let ((used-labels (mutable-seteq)))
     (let* ((l-ir (coalesce-label `(BEGIN ,@ir END)))
            (leaders (find-leaders l-ir))
-           (hoge (display leaders))
            (bbs (split l-ir leaders)))
       (gc-label (set-edges bbs used-labels) used-labels))))
-  
-
-
 
 
 ;;;; 各種表示
@@ -264,7 +267,7 @@
 (define (stmt->string stmt)
   (cond ((eq? stmt 'BEGIN) "<BEGIN>")
         ((eq? stmt 'END) "<END>")
-        (else (display stmt))))
+        (else (ir-stmt->string stmt))))
 
 ;; cfg [, prop->str] -> 人間が読みやすい表現のstring
 ;;   cfg: control flow graph
@@ -349,3 +352,69 @@
        (string-join (map bblock->edge bbs idxs)
                     "  " #:before-first "  ")
        "}\n"))))
+
+;main関数のcompound-stmtのリストのみを取り出す関数
+(define (get-main-def ir)
+  (if (and (ir-stx:fun-def? (car ir)) (equal? 'main (semantic:obj-name (ir-stx:fun-def-var (car ir)))))
+      (ir-stx:fun-def-body (car ir))
+      (get-main-def (cdr ir))))
+
+;ir:ir-simple-displayとは別に作成
+
+(define (exp->string exp)
+  (cond
+   ((semantic:obj? exp) (obj->string exp))
+   ((ir-stx:var-exp? exp) (exp->string (ir-stx:var-exp-var exp)))
+   ((ir-stx:lit-exp? exp) (format "~a" (ir-stx:lit-exp-val exp)))
+   ((ir-stx:aop-exp? exp) (format "(~a~a~a)"
+                           (exp->string (ir-stx:aop-exp-left exp))
+                           (ir-stx:aop-exp-op exp)
+                           (exp->string (ir-stx:aop-exp-right exp))))
+   ((ir-stx:rop-exp? exp) (format "(~a~a~a)"
+                           (exp->string (ir-stx:rop-exp-left exp))
+                           (ir-stx:rop-exp-op exp)
+                           (exp->string (ir-stx:rop-exp-right exp))))
+   ((ir-stx:addr-exp? exp) (format "&~a"
+                                   (exp->string (ir-stx:addr-exp-var exp))))
+   (else (error "unknown exp:" exp))))
+
+(define (obj->string obj)
+  (if (null? obj)
+      ""
+      (symbol->string (semantic:obj-name obj))))
+
+(define (ir-stmt->string stmt)
+  (cond
+    ((ir-stx:assign-stmt? stmt) (format "~a = ~a;"
+                                       (obj->string (ir-stx:assign-stmt-var stmt))
+                                       (exp->string (ir-stx:assign-stmt-exp stmt))))
+    ((ir-stx:write-stmt? stmt) (format "*~a = ~a;"
+                                      (obj->string (ir-stx:write-stmt-dest stmt))
+                                      (obj->string (ir-stx:write-stmt-src stmt))))
+    ((ir-stx:read-stmt? stmt) (format "~a = *~a;"
+                                     (obj->string (ir-stx:read-stmt-dest stmt))
+                                     (obj->string (ir-stx:read-stmt-src stmt))))
+   
+    ((ir-stx:label-stmt? stmt) (format "~a"
+                                       (ir-stx:label-stmt-name stmt)))
+    ((ir-stx:if-stmt? stmt) (format "if(~a) ~a ~a;"
+                                    (obj->string (ir-stx:if-stmt-var stmt))
+                                    (ir-stmt->string (ir-stx:if-stmt-tlabel stmt))
+                                    (ir-stmt->string (ir-stx:if-stmt-elabel stmt))))
+    ((ir-stx:goto-stmt? stmt) (format "goto ~a;"
+                                      (ir-stmt->string (ir-stx:goto-stmt-label stmt))))
+   ((ir-stx:ret-stmt? stmt) (if (null? (ir-stx:ret-stmt-var stmt))
+                                "return;"
+                                (format "return ~a;" (obj->string (ir-stx:ret-stmt-var stmt)))))
+   ((ir-stx:call-stmt? stmt) 
+    (if (null? (ir-stx:call-stmt-dest stmt))
+        (format "~a(~a);"
+                (obj->string (ir-stx:call-stmt-tgt stmt))
+                (string-join (map obj->string (ir-stx:call-stmt-vars stmt)) ","))
+        (format "~a = ~a(~a);"
+                (obj->string (ir-stx:call-stmt-dest stmt))
+                (obj->string (ir-stx:call-stmt-tgt stmt))
+                (string-join (map obj->string (ir-stx:call-stmt-vars stmt)) ","))))
+   ((ir-stx:print-stmt? stmt) (format "print(~a);"
+                                      (obj->string (ir-stx:print-stmt-var stmt))))
+   (else (error "unknown stmt:" stmt))))
