@@ -354,14 +354,14 @@
            ;既にnameが一致するオブジェクトが存在するとき
            (cond
              ;既に変数として存在するとき
-             ((equal? (obj-type search-rst) var)
+             ((equal? (obj-kind search-rst) var)
               (error (format
                       "~a:~a stx:function-prototype: ~a is already defined as var."
                       (position-line pgpos)
                       (position-col pgpos)
                       (obj-name newobj))))
              ;既に関数として存在するとき
-             ((equal? (obj-type search-rst) fun)
+             ((equal? (obj-kind search-rst) fun)
               (if (equal? (obj-type newobj) (obj-type search-rst))
                   (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
                   (error (format
@@ -370,7 +370,7 @@
                           (position-col pgpos)
                           (obj-name newobj)))))
              ;既にプロトタイプ宣言として存在するとき
-             ((equal? (obj-type search-rst) proto)
+             ((equal? (obj-kind search-rst) proto)
               (if (equal? (obj-type newobj) (obj-type search-rst))
                   (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
                   (error (format
@@ -385,7 +385,7 @@
                       (position-line pgpos)
                       (position-col pgpos)
                       (obj-name newobj))))
-             (else (error "unknown-obj-kind2")))
+             (else (begin (display (obj-type search-rst)) (error "unknown-obj-kind2"))))
            ;既にnameが一致するオブジェクトが存在しないとき→登録
            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
              (if (null? (cdr env))
@@ -595,16 +595,22 @@
            ;void型のときはnullでなければエラー
            (if (null? (stx:return-stmt-var ast))
                #t
-               (error (format "~a:~a: stx:return-stmt: the function whose type is void must not have return-val.")
+               (error (format "~a:~a: stx:return-stmt: the function whose type is void must not have return-val."
                       (position-line (stx:return-stmt-pos ast))
-                      (position-col (stx:return-stmt-pos ast))))
-           ;他の型のときは型が一致していればOK
-           (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
-               #t
+                      (position-col (stx:return-stmt-pos ast)))))
+           ;他の型の時はnullだとエラーにする
+           (if (null? (stx:return-stmt-var ast))
                (error (format
                        "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
                        (position-line (stx:return-stmt-pos ast))
-                       (position-col (stx:return-stmt-pos ast)))))))
+                       (position-col (stx:return-stmt-pos ast))))
+               ;他の型のときは型が一致していればOK
+               (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
+                   #t
+                   (error (format
+                           "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
+                           (position-line (stx:return-stmt-pos ast))
+                           (position-col (stx:return-stmt-pos ast))))))))
       
       (else (begin (display ast) (error "tree-walk-error:type-check")))))
   
@@ -758,16 +764,14 @@
     (else (begin (display exp) (error "tree-walk-error:type-check-exp")))))
 ;意味解析のメイン関数 抽象構文木をうけとり,オブジェクト情報の収集をしてオブジェクト情報を埋め込んだ抽象構文木をかえす。.
 ;同時に,二重定義や未定義変数,関数の使用してないかのチェックと型検査を行う.
-(define (semantic-analysis-ast ast)
-  (let ((object-collected-ast (collect-object ast)))
-    (begin
-      (type-check object-collected-ast)
-      object-collected-ast)))
-
 (define (semantic-analysis-file filename)
   (let* ((ast (parser:parse-file filename))
-         (object-collected-ast (collect-object ast)))
-    (begin
-      (type-check object-collected-ast)
-      object-collected-ast)))
-                                
+         (object-collected-ast (collect-object ast))
+         (type-check-test (type-check object-collected-ast))
+         ;main関数ない場合エラーにする
+         (exist-main #f)
+         (exist-main-test (map (lambda (x) (if (and (stx:func-definition? x) (equal? 'main (obj-name (stx:func-definition-var-decl x)))) ;main関数見つかったら
+                                               (set! exist-main #t)
+                                               exist-main)) object-collected-ast))
+         (test (if exist-main  "ok" (error "error: main function does not exist"))))
+    object-collected-ast))
