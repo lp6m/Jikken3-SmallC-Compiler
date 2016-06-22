@@ -217,7 +217,7 @@
                ;cmpd-stmt-stmts
                `(,@(exp->ir t0 (stx:assign-stmt-src exp))
                  ,(ir-stx:assign-stmt (stx:assign-stmt-var exp) (ir-stx:var-exp t0))
-                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0)))))))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp (stx:assign-stmt-var exp))))))))
        ;assign-stmtの左辺がderef-expのときメモリへの書き込み:write-stmt
        ;int *a; *a = 3;      => t0 = a; t1 = 3; write-stmt t0 t1
        ;int a[10]; a[2] = 3; => t0 = a; t1 = 2; t2 = t0 + t1; t3 = 3; write-stmt t2 t3
@@ -241,7 +241,7 @@
                `(,@(exp->ir t0 (stx:assign-stmt-var exp))　;a *(a+2)
                  ,@(exp->ir t1 (stx:assign-stmt-src exp))
                  ,(ir-stx:assign-stmt t0 (ir-stx:var-exp t1))
-                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t1)))))))))
+                 ,(ir-stx:assign-stmt dest (ir-stx:var-exp t0)))))))))
     ((stx:deref-exp? exp)
      (let ((t0 (fresh-tmpvar)))
        `(,(ir-stx:cmpd-stmt
