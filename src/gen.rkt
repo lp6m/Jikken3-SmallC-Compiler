@@ -497,8 +497,3 @@
       ,(emit .text)
       ,(emit .globl "main")
       ,@(gen-stmts addr-ir))))
-
-(define (test filename)
-  (display (code->string  (gen-code (addr:assign-addr (ir:ir-main filename))))))
-(define (test2 filename outfile)
-  (display (code->string  (gen-code (addr:assign-addr (ir:ir-main filename)))) (open-output-file outfile)))

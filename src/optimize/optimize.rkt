@@ -78,7 +78,7 @@
             (else var))
           var)))
   ;
-  (let* ((main-ir (cfg:get-main-def (addr:assign-addr ir)))
+  (let* ((main-ir (cfg:get-main-def ir))
          (main-cfg  (cfg:ir->cfg main-ir))
          (anlys (reach:analysis (apply set-union (map fv-stmt main-ir))))
          (solution (dfa:solve anlys main-cfg)) ;解析結果
@@ -90,13 +90,16 @@
                                       (exp (ir-stx:assign-stmt-exp x)))
                                   (ir-stx:assign-stmt 
                                    (ir-stx:assign-stmt-var x)
-                                   (cond ((ir-stx:var-exp? exp) (find-lit (ir-stx:var-exp-var exp) def-dict))
-                                         ((ir-stx:aop-exp? exp) (ir-stx:aop-exp (ir-stx:aop-exp-op exp)
-                                                                                (find-lit (ir-stx:aop-exp-left exp) def-dict)
-                                                                                (find-lit (ir-stx:aop-exp-right exp) def-dict)))
-                                         ((ir-stx:rop-exp? exp) (ir-stx:rop-exp (ir-stx:rop-exp-op exp)
-                                                                                (find-lit (ir-stx:rop-exp-left exp) def-dict)
-                                                                                (find-lit (ir-stx:rop-exp-right exp) def-dict)))
+                                   (cond ((ir-stx:var-exp? exp) (let ((rst (find-lit (ir-stx:var-exp-var exp) def-dict)))
+                                                                  (if (ir-stx:lit-exp? rst)
+                                                                      rst
+                                                                      (ir-stx:var-exp rst))))
+                                         ;((ir-stx:aop-exp? exp) (ir-stx:aop-exp (ir-stx:aop-exp-op exp)
+                                         ;                                       (find-lit (ir-stx:aop-exp-left exp) def-dict)
+                                         ;                                       (find-lit (ir-stx:aop-exp-right exp) def-dict)))
+                                         ;((ir-stx:rop-exp? exp) (ir-stx:rop-exp (ir-stx:rop-exp-op exp)
+                                         ;                                       (find-lit (ir-stx:rop-exp-left exp) def-dict)
+                                         ;                                       (find-lit (ir-stx:rop-exp-right exp) def-dict)))
                                          (else exp))))
                                 x))
                 main-ir)))
