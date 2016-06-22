@@ -273,7 +273,7 @@
                     (let ((p-sgn (store-lookup ps v))
                           (n-sgn (store-lookup ns v)))
                       (store-update
-                       ns v (sign-lub p-sgn n-sgn))))
+                       ns v (sign-lub p-sgn n-sgn)))) ;set-union
                   ns
                   (store-vars ps)))  
          bot-store

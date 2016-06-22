@@ -46,10 +46,10 @@
             ;(car w)はプログラムの1文,(cdr w)はそのプログラム持っている変数についての情報
             (let* ((stmt (car w))
                    (old-entry (get-prop entries stmt))  ;直前の辞書[現在のプログラム文] 以前の変数のプロパティ辞書をold-entryに入れる
-                   (new-entry (lub old-entry (cdr w)))) ;; 追加を考慮し再計算
+                   (new-entry (lub old-entry (cdr w)))) ;(cdr w)は辞書; 追加を考慮し再計算
               (case (prop-compare new-entry old-entry) ;; 差分の有無で場合分け
                 ((0) (fixed-point new-wl entries exits))
-                ((1) (let ((old-exit (get-prop exits stmt))
+                ((1) (let* ((old-exit (get-prop exits stmt))
                            (new-exit (transfer stmt new-entry)))
                        (case (prop-compare new-exit old-exit);;差分の有無で場合分け
                          ((0) (fixed-point
