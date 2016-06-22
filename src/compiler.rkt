@@ -14,3 +14,6 @@
                 (optimize:optimize (addr:assign-addr (ir:ir-main filename)))
                 (addr:assign-addr (ir:ir-main filename)))))
     (display (gen:code->string (gen:gen-code ir)))))
+
+(define (compile-optimize filename)
+  (compile filename #t))
