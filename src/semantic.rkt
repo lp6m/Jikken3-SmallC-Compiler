@@ -211,7 +211,7 @@
         (collect-object-main (stx:deref-exp-arg ast) lev)
         (stx:deref-exp-pos ast)))
       ;stx:var-decl
-      ((stx:var-decl? ast) (error "tree-walk-error:var-decl"))
+      ((stx:var-decl? ast) (begin (eprintf "tree-walk-error:var-decl") (error)))
       ;stx:lit-exp
       ((stx:lit-exp? ast) ast)
       ;stx:var-exp
@@ -222,16 +222,16 @@
          (if search-rst                                                                
              (if (or (equal? var (obj-kind search-rst)) (equal? parm (obj-kind search-rst))) ;見つかった場合,varかparmとして宣言されているか確認
                 search-rst                                                                     ;varかparmであれば見つかったobjをかえす
-               (error (format
-                              "~a:~a: stx:var-exp: ~a is defined as function-definition or function-prototype not as variable."
-                              (position-line (stx:var-exp-pos ast))
-                              (position-col (stx:var-exp-pos ast))
-                              (stx:var-exp-tgt ast))))                                            ;funやprotoとして定義されている
-            (error (format
-                    "~a:~a: stx:var-exp: ~a is undefined."
-                    (position-line (stx:var-exp-pos ast))
-                    (position-col (stx:var-exp-pos ast))
-                    (stx:var-exp-tgt ast))))))                                          ;見つからなかった場合,未定義
+               (begin (eprintf "~a:~a: stx:var-exp: ~a is defined as function-definition or function-prototype not as variable."
+                               (position-line (stx:var-exp-pos ast))
+                               (position-col (stx:var-exp-pos ast))
+                               (stx:var-exp-tgt ast))
+                      (error)))                                            ;funやprotoとして定義されている
+            (begin (eprintf "~a:~a: stx:var-exp: ~a is undefined."
+                            (position-line (stx:var-exp-pos ast))
+                            (position-col (stx:var-exp-pos ast))
+                            (stx:var-exp-tgt ast))
+                   (error)))))                                          ;見つからなかった場合,未定義
       ;stx:func-call-exp
       ((stx:funccall-exp? ast)
        (stx:funccall-exp
@@ -241,16 +241,16 @@
           (if search-rst
               (if (or (equal? fun (obj-kind search-rst)) (equal? proto (obj-kind search-rst)))  ;見つかった場合,funまたはprotoとして宣言されているか確認
                   search-rst                                                                      ;funまたはobjであれば見つかったobjをかえす
-                  (error (format
-                          "~a:~a: stx:funccall-exp ~a is defined as variable not as function-definition or function-prototype."
-                          (position-line (stx:funccall-exp-pos ast))
-                          (position-col (stx:funccall-exp-pos ast))
-                          (stx:funccall-exp-tgt ast))))                                          ;varして定義されている
-              (error (format
-                      "~a:~a: stx:funccall-exp ~a is undefined."
-                      (position-line (stx:funccall-exp-pos ast))
-                      (position-col (stx:funccall-exp-pos ast))
-                      (stx:funccall-exp-tgt ast)))))                                            ;見つからなかった場合,未定義
+                  (begin (eprintf "~a:~a: stx:funccall-exp ~a is defined as variable not as function-definition or function-prototype."
+                                  (position-line (stx:funccall-exp-pos ast))
+                                  (position-col (stx:funccall-exp-pos ast))
+                                  (stx:funccall-exp-tgt ast))
+                         (error)))                                          ;varして定義されている
+              (begin (eprintf "~a:~a: stx:funccall-exp ~a is undefined."
+                              (position-line (stx:funccall-exp-pos ast))
+                              (position-col (stx:funccall-exp-pos ast))
+                              (stx:funccall-exp-tgt ast))
+                     (error))))                                            ;見つからなかった場合,未定義
         ;stx:funccall-exp-paramlist
         (collect-object-main (stx:funccall-exp-paramlist ast) lev)
         (stx:funccall-exp-pos ast)))
@@ -294,20 +294,20 @@
                     ;関数宣言または関数プロトタイプ宣言で既にあるとき,その関数宣言のレベルが0であればエラー
                     ((or (equal? (obj-kind search-rst) fun) (equal? (obj-kind search-rst) proto))
                      (if (equal? 0 (obj-lev newobj))
-                         (error (format 
-                                 "~a:~a: stx:declaration ~a is already defined as function-definition."
-                                 (position-line pgpos)
-                                 (position-col pgpos)
-                                 (obj-name newobj)))
+                         (begin (eprintf "~a:~a: stx:declaration ~a is already defined as function-definition."
+                                         (position-line pgpos)
+                                         (position-col pgpos)
+                                         (obj-name newobj))
+                                (error))
                          #f))
                     ;変数宣言で既にあるとき,新しいオブジェクトとレベルが同じならエラー
                     ((equal? (obj-kind search-rst) var)
                      (if (equal? (obj-lev newobj) (obj-lev search-rst))
-                         (error (format
-                                 "~a:~a: stx:declaration ~a is already defined as variable in the same level."
-                                 (position-line pgpos)
-                                 (position-col pgpos)
-                                 (obj-name newobj)))
+                         (begin (eprintf "~a:~a: stx:declaration ~a is already defined as variable in the same level."
+                                         (position-line pgpos)
+                                         (position-col pgpos)
+                                         (obj-name newobj))
+                                (error))
                          #f))
                     ;関数パラメータで既にあるとき,警告を表示して登録
                     ((equal? (obj-kind search-rst) parm)
@@ -316,7 +316,7 @@
                                      (position-col pgpos)
                                      (obj-name newobj))
                             #f))
-                    (else (begin (display search-rst) (error "unknown obj-kind1"))))))
+                    (else (begin (display search-rst) (eprintf "unknown obj-kind1") (error))))))
              (if error-flg
                  (error "ここにはこない")
                  (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
@@ -333,11 +333,11 @@
        (if search-rst
            ;パラメータ二重宣言ならエラー
            (if (equal? (obj-kind search-rst) parm)
-               (error (format
-                       "~a:~a: stx:function-prototype-parm ~a is already defined as the function-param in the same function."
-                       (position-line pgpos)
-                       (position-col pgpos)
-                       (obj-name newobj)))
+               (begin (eprintf "~a:~a: stx:function-prototype-parm ~a is already defined as the function-param in the same function."
+                               (position-line pgpos)
+                               (position-col pgpos)
+                               (obj-name newobj))
+                      (error))
                ;登録
                (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
                  (if (null? (cdr env))
@@ -355,36 +355,36 @@
            (cond
              ;既に変数として存在するとき
              ((equal? (obj-kind search-rst) var)
-              (error (format
-                      "~a:~a stx:function-prototype: ~a is already defined as var."
-                      (position-line pgpos)
-                      (position-col pgpos)
-                      (obj-name newobj))))
+              (begin (eprintf "a:~a stx:function-prototype: ~a is already defined as var."
+                              (position-line pgpos)
+                              (position-col pgpos)
+                              (obj-name newobj))
+                     (error)))
              ;既に関数として存在するとき
              ((equal? (obj-kind search-rst) fun)
               (if (equal? (obj-type newobj) (obj-type search-rst))
                   (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
-                  (error (format
-                          "~a:~a stx:function-prototype: ~a: different-type-parameter-function is already defined."
-                          (position-line pgpos)
-                          (position-col pgpos)
-                          (obj-name newobj)))))
+                  (begin (eprintf "~a:~a stx:function-prototype: ~a: different-type-parameter-function is already defined."
+                           (position-line pgpos)
+                           (position-col pgpos)
+                           (obj-name newobj))
+                         (error))))
              ;既にプロトタイプ宣言として存在するとき
              ((equal? (obj-kind search-rst) proto)
               (if (equal? (obj-type newobj) (obj-type search-rst))
                   (cons newobj env)                    ;型情報が既に存在するものと一致する場合、更新せずにかえす
-                  (error (format
-                          "~a:~a stx:function-prototype: ~a: different-type-parameter-prototype is already defined."
-                          (position-line pgpos)
-                          (position-col pgpos)
-                          (obj-name newobj)))))
+                  (begin (eprintf "~a:~a stx:function-prototype: ~a: different-type-parameter-prototype is already defined."
+                                  (position-line pgpos)
+                                  (position-col pgpos)
+                                  (obj-name newobj))
+                         (error))))
              ;既にパラメータとして存在しているとき
              ((equal? (obj-kind search-rst) parm);たぶんここにはこない
-              (error (format
-                      "~a:~a: stx:function-prototype: ~a is already defined as function-param."
-                      (position-line pgpos)
-                      (position-col pgpos)
-                      (obj-name newobj))))
+              (begin (eprintf "~a:~a: stx:function-prototype: ~a is already defined as function-param."
+                              (position-line pgpos)
+                              (position-col pgpos)
+                              (obj-name newobj))
+                     (error)))
              (else (begin (display (obj-type search-rst)) (error "unknown-obj-kind2"))))
            ;既にnameが一致するオブジェクトが存在しないとき→登録
            (let ((top-env (lambda  (x)  (if (equal? (obj-name x) (obj-name newobj)) newobj ((car env) x)))))
@@ -398,23 +398,23 @@
            ;既にnameが一致するオブジェクトが存在するとき
            (cond
              ((equal? (obj-kind search-rst) var)
-              (error (format
-                      "~a:~a: stx:function-definition: ~a is already defined as variable."
-                      (position-line pgpos)
-                      (position-col pgpos)
-                      (obj-name newobj))))
+              (begin (eprintf "~a:~a: stx:function-definition: ~a is already defined as variable."
+                              (position-line pgpos)
+                              (position-col pgpos)
+                              (obj-name newobj))
+                     (error)))
              ((equal? (obj-kind search-rst) parm);たぶんここにはこない
-              (error (format
-                      "~a:~a: stx:function-definition: ~a is already defined as function-param."
-                      (position-line pgpos)
-                      (position-col pgpos)
-                      (obj-name newobj))))
+              (begin (eprintf "~a:~a: stx:function-definition: ~a is already defined as function-param."
+                              (position-line pgpos)
+                              (position-col pgpos)
+                              (obj-name newobj))
+                     (error)))
              ((equal? (obj-kind search-rst) fun)
-              (error (format
-                      "~a:~a: stx:function-deinition: ~a is already defined as function. function-definitin is duplicate."
-                      (position-line pgpos)
-                      (position-col pgpos)
-                      (obj-name newobj))))
+              (begin (eprintf "~a:~a: stx:function-deinition: ~a is already defined as function. function-definitin is duplicate."
+                              (position-line pgpos)
+                              (position-col pgpos)
+                              (obj-name newobj))
+                     (error)))
              ((equal? (obj-kind search-rst)  proto)
               ;型情報が一致しているかどうかチェック
               (if (equal? (obj-type newobj) (obj-type search-rst))
@@ -424,11 +424,11 @@
                         (cons newobj `(,top-env))
                         (cons newobj `(,top-env ,@(cdr env)))))
                   ;エラー
-                  (error (format
-                          "~a:~a: stx:function-definition: ~a: The types of parameters does not match with function-prototype which is already defined."
-                          (position-line pgpos)
-                          (position-col pgpos)
-                          (obj-name newobj)))))
+                  (begin (eprintf "~a:~a: stx:function-definition: ~a: The types of parameters does not match with function-prototype which is already defined."
+                                  (position-line pgpos)
+                                  (position-col pgpos)
+                                  (obj-name newobj))
+                         (error))))
                           
              (else (error "unknown obj-kind3")))
            
@@ -570,9 +570,10 @@
                #t
                #f)
            ;testの型がintでなければエラー
-           (error (format "~a:~a: stx:while-stmt: the type of while-test or for-test must be int"
-                          (position-line (stx:while-stmt-pos ast))
-                          (position-col (stx:while-stmt-pos ast))))))
+           (begin (eprintf "~a:~a: stx:while-stmt: the type of while-test or for-test must be int"
+                           (position-line (stx:while-stmt-pos ast))
+                           (position-col (stx:while-stmt-pos ast)))
+                  (error))))
       
       ;stx:if-else-stmt
       ((stx:if-else-stmt? ast)
@@ -585,9 +586,10 @@
                #t
                #f)
            ;testの型がintでなければエラー
-           (error (format "~a:~a: stx:if-else-stmt the type of if-test must be int"
-                          (position-line (stx:if-else-stmt-pos ast))
-                          (position-col (stx:if-else-stmt-pos ast))))))
+           (begin (eprintf "~a:~a: stx:if-else-stmt the type of if-test must be int"
+                           (position-line (stx:if-else-stmt-pos ast))
+                           (position-col (stx:if-else-stmt-pos ast)))
+                  (error))))
       ;stx:return-stmt
       ;現在いる関数の型と一致しなければエラー
       ((stx:return-stmt? ast)
@@ -595,22 +597,23 @@
            ;void型のときはnullでなければエラー
            (if (null? (stx:return-stmt-var ast))
                #t
-               (error (format "~a:~a: stx:return-stmt: the function whose type is void must not have return-val."
-                      (position-line (stx:return-stmt-pos ast))
-                      (position-col (stx:return-stmt-pos ast)))))
+               (begin (eprintf "~a:~a: stx:return-stmt: the function whose type is void must not have return-val."
+                               (position-line (stx:return-stmt-pos ast))
+                               (position-col (stx:return-stmt-pos ast)))
+                      (error)))
            ;他の型の時はnullだとエラーにする
            (if (null? (stx:return-stmt-var ast))
-               (error (format
-                       "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
-                       (position-line (stx:return-stmt-pos ast))
-                       (position-col (stx:return-stmt-pos ast))))
+               (begin (eprintf "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
+                               (position-line (stx:return-stmt-pos ast))
+                               (position-col (stx:return-stmt-pos ast)))
+                      (error))
                ;他の型のときは型が一致していればOK
                (if (isequal-type now-func-type-struct (type-check-exp (stx:return-stmt-var ast)))
                    #t
-                   (error (format
-                           "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
-                           (position-line (stx:return-stmt-pos ast))
-                           (position-col (stx:return-stmt-pos ast))))))))
+                   (begin (eprintf "~a:~a: stx:return-stmt: the return-val-list-types doesn't match the function-definition."
+                                   (position-line (stx:return-stmt-pos ast))
+                                   (position-col (stx:return-stmt-pos ast)))
+                          (error))))))
       
       (else (begin (display ast) (error "tree-walk-error:type-check")))))
   
@@ -631,21 +634,26 @@
      (let ((left-type (type-check-exp (stx:assign-stmt-var exp)))
            (right-type (type-check-exp (stx:assign-stmt-src exp))))
        (if (not (or (stx:deref-exp? (stx:assign-stmt-var exp)) (obj? (stx:assign-stmt-var exp))))
-           (error (format "~a:~a: the left operand type of assign-statement is incorrect."
-                          (position-line (stx:assign-stmt-pos exp))
-                          (position-col (stx:assign-stmt-pos exp))))
+           (begin (eprintf "~a:~a: the left operand type of assign-statement is incorrect."
+                           (position-line (stx:assign-stmt-pos exp))
+                           (position-col (stx:assign-stmt-pos exp)))
+                  (error))
            (if (isequal-type left-type right-type)
                left-type
-               (error (format "the left operand type and the right operand type of assign-statement be same."))))))
+               (begin (eprintf "~a:~a: the left operand type and the right operand type of assign-statement be same."
+                               (position-line (stx:assign-stmt-pos exp))
+                               (position-col (stx:assign-stmt-pos exp)))
+                      (error))))))
     ;stx:funccall-exp
     ;collec-objectで木を巡回したときに収集した関数の情報から,引数の個数と型が一致しているかをしらべる
     ((stx:funccall-exp? exp)
      (let ((search-rst (search-func-by-name (obj-name (stx:funccall-exp-tgt exp)))))
        (if (equal? #f search-rst)
-           (error (format "~a:~a stx:funccall-exp: call undefined function \"~a\""
-                                  (position-line (stx:funccall-exp-pos exp))
-                                  (position-col (stx:funccall-exp-pos exp))
-                                  (stx:funccall-exp-tgt exp)))
+           (begin (eprintf "~a:~a stx:funccall-exp: call undefined function \"~a\""
+                           (position-line (stx:funccall-exp-pos exp))
+                           (position-col (stx:funccall-exp-pos exp))
+                           (stx:funccall-exp-tgt exp))
+                  (error))
            (let ((funccall-exptypelist  ;関数呼び出しで使用されている式の型リスト
                   (if (null? (stx:funccall-exp-paramlist exp))
                       `()
@@ -664,13 +672,15 @@
                      ;関数呼び出しでの引数の型と関数定義された引数の型が全て等しいのでOK.かえす型は関数自体の型.search-rstの2個目の要素
                      (conv-typelist-to-struct (cadr search-rst))
                      ;エラー
-                     (error (format "~a:~a: stx:funccall-exp: the type-list of funccall-parmlist doesn't match with the type-list of function-definition"
-                             (position-line (stx:funccall-exp-pos exp))
-                             (position-col (stx:funccall-exp-pos exp)))))
+                     (begin (eprintf "~a:~a: stx:funccall-exp: the type-list of funccall-parmlist doesn't match with the type-list of function-definition"
+                                     (position-line (stx:funccall-exp-pos exp))
+                                     (position-col (stx:funccall-exp-pos exp)))
+                            (error)))
                  ;引数の個数が一致しなかった
-                 (error (format "~a:~a: stx:funccall-exp: the number of type-lists of funccall-parmlist doesn't match with the number of type-lists of function-definition"
-                             (position-line (stx:funccall-exp-pos exp))
-                             (position-col (stx:funccall-exp-pos exp)))))))))
+                 (begin (eprintf "~a:~a: stx:funccall-exp: the number of type-lists of funccall-parmlist doesn't match with the number of type-lists of function-definition"
+                                 (position-line (stx:funccall-exp-pos exp))
+                                 (position-col (stx:funccall-exp-pos exp)))
+                        (error)))))))
     ;stx:aop-exp
     ((stx:aop-exp? exp)
      (let
@@ -691,9 +701,10 @@
                  (and (isint-pointerpointer right-type) (isint left-type)))
              (type-struct 'int #f #t #t))
             ;エラー
-            (else (error (format "~a:~a: stx:aop-exp: the type of operand of \"+\" operation is incorrect."
-                             (position-line (stx:aop-exp-pos exp))
-                             (position-col (stx:aop-exp-pos exp)))))))
+            (else (begin (eprintf "~a:~a: stx:aop-exp: the type of operand of \"+\" operation is incorrect."
+                                  (position-line (stx:aop-exp-pos exp))
+                                  (position-col (stx:aop-exp-pos exp)))
+                         (error)))))
          ;-演算
          ((equal? '- (stx:aop-exp-op exp))
           (cond
@@ -704,23 +715,26 @@
             ;int** - int
             ((and (isint-pointerpointer left-type) (isint right-type)) (type-struct 'int #f #t #t))
             ;エラー
-            (else (error (format "~a:~a: stx:aop-exp: the type of operand of \"-\" operation is incorrect."
-                             (position-line (stx:aop-exp-pos exp))
-                             (position-col (stx:aop-exp-pos exp)))))))
+            (else (begin (eprintf "~a:~a: stx:aop-exp: the type of operand of \"-\" operation is incorrect."
+                                  (position-line (stx:aop-exp-pos exp))
+                                  (position-col (stx:aop-exp-pos exp)))
+                         (error)))))
          ;*演算
          ((equal? '* (stx:aop-exp-op exp))
           (if (and (isint left-type) (isint right-type))
               (type-struct 'int #f #f #f)
-              (error (format "~a:~a: stx:aop-exp: the type of operand of \"*\" operation is incorrect."
-                             (position-line (stx:aop-exp-pos exp))
-                             (position-col (stx:aop-exp-pos exp))))))
+              (begin (eprintf "~a:~a: stx:aop-exp: the type of operand of \"*\" operation is incorrect."
+                              (position-line (stx:aop-exp-pos exp))
+                              (position-col (stx:aop-exp-pos exp)))
+                     (error))))
          ;/演算
          ((equal? '/ (stx:aop-exp-op exp))
           (if (and (isint left-type) (isint right-type))
               (type-struct 'int #f #f #f)
-              (error (format "~a:~a: stx:aop-exp: the type of operand of \"/\" operation is incorrect."
-                             (position-line (stx:aop-exp-pos exp))
-                             (position-col (stx:aop-exp-pos exp))))))
+              (begin (eprintf "~a:~a: stx:aop-exp: the type of operand of \"/\" operation is incorrect."
+                              (position-line (stx:aop-exp-pos exp))
+                              (position-col (stx:aop-exp-pos exp)))
+                     (error))))
          (else (error "unknown operand")))))
     ;stx;rop-exp
     ((stx:rop-exp? exp)
@@ -728,23 +742,26 @@
            (right-type (type-check-exp (stx:rop-exp-right exp))))
        (if (isequal-type left-type right-type)
            (type-struct 'int #f #f #f)
-           (error (format "~a:~a: stx:rop-exp: the types of left-operand and right-operand must be same."
-                             (position-line (stx:rop-exp-pos exp))
-                             (position-col (stx:rop-exp-pos exp)))))))
+           (begin (eprintf "~a:~a: stx:rop-exp: the types of left-operand and right-operand must be same."
+                           (position-line (stx:rop-exp-pos exp))
+                           (position-col (stx:rop-exp-pos exp)))
+                  (error)))))
     ;stx:logical-and-or-exp
     ((stx:logical-and-or-expr? exp)
      (if (and (isint (type-check-exp (stx:logical-and-or-expr-log1 exp))) (isint (type-check-exp (stx:logical-and-or-expr-log2 exp))))
          (type-struct 'int #f #f #f)
-         (error (format "~a:~a: stx:logical-and-or-exp: the type of operand of \"&&\" or \"||\" expression is incorrect."
-                             (position-line (stx:logical-and-or-expr-pos exp))
-                             (position-col (stx:logical-and-or-expr-pos exp))))))
+         (begin (eprintf "~a:~a: stx:logical-and-or-exp: the type of operand of \"&&\" or \"||\" expression is incorrect."
+                         (position-line (stx:logical-and-or-expr-pos exp))
+                         (position-col (stx:logical-and-or-expr-pos exp)))
+                (error))))
     ;stx:addr-exp &
     ((stx:addr-exp? exp)
      (if (isint (type-check-exp (stx:addr-exp-var exp)))
          (type-struct 'int #f #t #f)
-         (error (format "~a:~a: stx:addr-exp: the type of operand of addr-exp must be int"
-                             (position-line (stx:addr-exp-pos exp))
-                             (position-col (stx:addr-exp-pos exp))))))
+         (begin (eprintf "~a:~a: stx:addr-exp: the type of operand of addr-exp must be int"
+                         (position-line (stx:addr-exp-pos exp))
+                         (position-col (stx:addr-exp-pos exp)))
+                (error))))
     ;stx:deref-exp *
     ((stx:deref-exp? exp)
      ;*e eがint*ならintつける
@@ -754,9 +771,10 @@
        ;*e eがint**ならint*つける
        ((isint-pointerpointer (type-check-exp (stx:deref-exp-arg exp)))
         (type-struct 'int #f #t #f))
-       (else (error (format "~a:~a: stx:deref-exp: the type of operand of deref-exp is incorrect."
-                             (position-line (stx:deref-exp-pos exp))
-                             (position-col (stx:deref-exp-pos exp)))))))
+       (else (begin (eprintf "~a:~a: stx:deref-exp: the type of operand of deref-exp is incorrect."
+                            (position-line (stx:deref-exp-pos exp))
+                            (position-col (stx:deref-exp-pos exp)))
+                    (error)))))
     ;stx:lit-exp
     ((stx:lit-exp? exp) (type-struct 'int #f #f #f))
     ;obj
@@ -773,5 +791,5 @@
          (exist-main-test (map (lambda (x) (if (and (stx:func-definition? x) (equal? 'main (obj-name (stx:func-definition-var-decl x)))) ;main関数見つかったら
                                                (set! exist-main #t)
                                                exist-main)) object-collected-ast))
-         (test (if exist-main  "ok" (error "error: main function does not exist"))))
+         (test (if exist-main  "ok" (begin (eprintf "error: main function does not exist") (error)))))
     object-collected-ast))
